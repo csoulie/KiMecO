@@ -148,8 +148,15 @@ class RateCo:
                     return rows
                 i += 1
             else:
+                retry = 0
                 while not os.stat(output_name).st_size > 0:
                     time.sleep(2)
+                    retry += 1
+                    if retry == 10:
+                        self.klog.error(
+                            f'{output_name} is empty after 20s.')
+                        raise FileNotFoundError(
+                            f'{output_name} is empty after 20s.') 
 
             if self.software == 'mess':
                 mor = MessOutputReader(filename=output_name,

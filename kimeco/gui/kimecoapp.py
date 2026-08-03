@@ -47,8 +47,8 @@ class KimecoApp(KiMecO):
         self.input_tpls: list[list[str]]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
-
         self.species: list[str] = self.init_SOP.species
+        self._set_scoring_function()
 
         # GOAT file will be handled by a GOATs instance after DB init
         # Initialize app

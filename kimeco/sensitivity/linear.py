@@ -328,9 +328,9 @@ class Linear(CoreRun):
 
     def run(self) -> None:
         super().run()
-        zero: float = self.models[0].score
+        zero: float = self.models[0].experiment_score
         rslts: NDArray = np.absolute(
-            [mdl.score - zero for mdl in self.models[1:]]
+            [mdl.experiment_score - zero for mdl in self.models[1:]]
             )
         half = int(len(rslts)/2)
         highest = [

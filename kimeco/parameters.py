@@ -180,6 +180,21 @@ class SOP:
             names.append(well.name)
         return names
 
+    def _check_item_name(self,
+                         name: str) -> None:
+        """Check if the name of the item is valid.
+        It should not contain some specific substrings.
+
+        Args:
+            name (str): Item name
+        """
+        if '.' in name:
+            raise ValueError(
+                f"Item name cannot contain a dot: {name}")
+        elif dbs in name:
+            raise ValueError(
+                f"Item name cannot contain the db separator '{dbs}': {name}")
+
     def add_new_well(self,
                      name: str,
                      pes_id: int) -> None:
@@ -189,6 +204,7 @@ class SOP:
             name (str): Well's name
             pes_id (int): PES ID
         """
+        self._check_item_name(name)
         self.wells.append(
             Well(name=name,
                  pes_ids=[pes_id]))
@@ -234,6 +250,7 @@ class SOP:
             name (str): name of the bimolecular object
             pes_id (int): PES ID
         """
+        self._check_item_name(name)
         if name in self.items.keys():
             self.items[name].in_multiple_pes = True
             if pes_id not in self.items[name].pes_ids:
@@ -297,6 +314,7 @@ class SOP:
             rside (str): name of the product
             pes_id (int): PES ID
         """
+        self._check_item_name(name)
         if name in self.items.keys():
             raise KeyError(
                 f'Multiple barriers have the same name: {name}')
