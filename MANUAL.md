@@ -96,6 +96,8 @@ You have two options:
 ### 2) Utilities overview
 
 - `kmo_start`: input builder GUI. Use this first if you are new to KiMecO.
+  - KIN section behavior: `From` and `To` lists include only wells and bimolecular species (fragments are excluded).
+  - KIN section behavior: entries are shown as `NAME [PES XX]`; selecting `From`/`To` enforces same-PES pairs via reciprocal filtering, invalid selections are auto-cleared, and plotting blocks cross-PES pairs with an explanatory message.
 - `kmo input.json`: main optimization run command. It reads your input JSON and launches KiMecO.
 - `kmoui input.json`: analysis/inspection GUI for completed runs.
 - `kmopp input.json`: postprocessing command-line utility.
