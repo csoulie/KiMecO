@@ -1,58 +1,70 @@
-# Multi-Agent Architecture For GAME
+# Agentic Delivery Pipeline for GAME / KiMecO
 
-## Hierarchy
+Every change request flows through a single **seven-stage pipeline**, driven by the user-invocable **Workflow Orchestrator**. The orchestrator is the only agent that talks to the user; the seven stage agents run as subagents and return their output to it.
 
-Root Coordinator Agent
-- Runtime Lead Agent
-  - Run Orchestration Agent
-  - Execution Pipeline Agent
-  - Optimization Agent
-  - Scheduler and Simulation Agent
-- Experience and Data Lead Agent
-  - Input and Config Agent
-  - Mechanism and SOP Agent
-  - Persistence, UI, and Postprocess Agent
-- Version Control Agent
+## Pipeline
 
-## Domain Ownership Map
+```
+User request
+   │
+   ▼
+Workflow Orchestrator  ──drives──► 1. Scope Assessment ─┐
+   ▲                                                    │
+   │                               2. Specification Review
+   │                                                    │
+   │                       NEEDS_INPUT ◄────────────────┤
+   │                               3. Clarification ─────┘   (loop 1→2→3 until COMPLETE)
+   │                                                    │
+   │                                          COMPLETE  ▼
+   │                               4. Boundary Definition  (modify vs freeze → user validates)
+   │                                                    │
+   │                               5. Design (in parallel):
+   │                                    ├─ Planning  (plan design, Phase A)
+   │                                    └─ CI Test   (test design)
+   │                                        → user confirms plan + tests together
+   │                                                    │
+   │                               6. Implement + run tests:
+   │                                    ├─ Planning  (implement, in bounds)
+   │                                    └─ CI Test   (author + run tests)
+   │                                                    │
+   │                               7. Version Control  (changelog + wiki + manual)
+   ▼
+Summary to user
+```
 
-| Agent | Owned paths |
-| --- | --- |
-| Run Orchestration | `kimeco/__init__.py`, `kimeco/main.py`, `kimeco/_kimeco.py`, packaging/CI (`pyproject.toml` scripts, `kmo_install_test.sh`, `.gitlab-ci.yml`) |
-| Execution Pipeline | `kimeco/core.py`, `kimeco/generation.py`, `kimeco/model.py`, `kimeco/goat.py`, `kimeco/scoring_f/`, `kimeco/sensitivity/` |
-| Optimization | `kimeco/optimizers/`, `kimeco/Perturbators/` |
-| Scheduler and Simulation | `kimeco/q_sys.py`, `kimeco/rate_coef.py`, `kimeco/simulation.py`, `kimeco/experiments/`, `kimeco/templates/` (job/array), `kimeco/cantera/` |
-| Input and Config | `kimeco/user_input.py`, `kimeco/default_settings.py`, `kimeco/enums.py`, `kimeco/logger_config.py` |
-| Mechanism and SOP | `kimeco/parameters.py`, `kimeco/barrier.py`, `kimeco/well.py`, `kimeco/bimolecular.py`, `kimeco/kinmec.py`, `kimeco/rotors/`, `kimeco/readers/`, `kimeco/writers/`, `kimeco/templates/ct_reaction_tpl.py` |
-| Persistence, UI, and Postprocess | `kimeco/database/`, `kimeco/gui/`, `kimeco/postprocessing/` |
-| Version Control | `CHANGELOG.md`, version fields in `pyproject.toml` / `setup.py` / `meta.yaml`, release merges into `main` and annotated tags |
+## Stages
 
-Every `kimeco/` module has exactly one owner; `tests/` is shared and edited by the agent that owns the code under test.
+| # | Agent (`*.agent.md`) | Role | Tools | User-invocable |
+| --- | --- | --- | --- | --- |
+| — | `workflow-orchestrator` | Entry point. Drives the loop, is the sole user-facing agent, dispatches all stages. | read, search, agent, todo | yes |
+| 1 | `scope-assessment` | Exhaustively determines every system concerned (backend, config, DB, GUIs) and ripple effects. Must not miss anything. | read, search | no |
+| 2 | `spec-review` | Gatekeeper: decides `COMPLETE` vs `NEEDS_INPUT` (ambiguity / missing decisions). | read, search | no |
+| 3 | `clarification` | Turns Stage 2 gaps into precise questions with concrete options for the user. | read, search | no |
+| 4 | `boundaries` | Defines the safe **modify zone** vs **freeze zone**; **user validates** before planning. | read, search | no |
+| 5 | `planning` ∥ `ci-test` | **Plan design and test design run in parallel** from the same spec + boundaries; user confirms both together before any code is written. | read, search, edit, execute, todo | no |
+| 6 | `planning` → `ci-test` | `planning` implements inside the boundaries, then `ci-test` authors + runs the designed tests. | read, search, edit, execute, todo | no |
+| 7 | `version-control` | Updates `CHANGELOG.md`, the wiki (`wiki/**`), and the manual (`MANUAL.md`); handles release cuts on approval. | read, search, edit, execute, todo | yes |
 
-## Ownership Model
+## Loop and gate rules
 
-- Agents edit only files inside their declared scope.
-- Cross-domain modifications require routing through Root Coordinator Agent.
-- Leads arbitrate boundary questions before specialist edits begin.
+- Stages 1→2→3 repeat until Stage 2 returns `STATUS: COMPLETE`. Every clarification answer re-enters at Stage 1 (re-assess scope on the enriched spec).
+- Boundary definition (Stage 4) begins only after `COMPLETE` (or an explicit user "proceed as-is").
+- Stage 5 runs **plan design (`planning` Phase A) and test design (`ci-test`) in parallel** from the same validated boundaries; the user confirms the combined plan + test design before any code is written.
+- Stage 6 is sequential: `planning` implements strictly inside the validated modify zone, then `ci-test` authors and runs the designed tests. Stage 6 begins only after the Stage 5c confirmation.
+- The user is still asked for a preferred test before Stage 5 test design begins.
+- Stages run in order 1–3 → 4 → 5 → 6 → 7; only the two Stage-5 design tasks run concurrently.
 
-## Interaction Rules
+## User-interaction model
 
-- Use interfaces, not internals: agents consume public methods and stable data contracts.
-- No direct cross-domain edits without coordinator approval.
-- For multi-domain work, Root Coordinator Agent requests plans/sign-off from both affected leads, then dispatches the owning specialist(s) to execute, and obtains final consistency approval from the leads.
-- Subagent invocations are flat: the coordinator dispatches leads for review/sign-off and specialists for edits; nested delegation is not assumed.
-- If contract risk exists (schema, input format, status transitions), both relevant leads must approve.
+- The orchestrator owns all direct user interaction. Stage agents produce the *content* of questions (Stage 3), boundary proposals (Stage 4), plans and test designs (Stage 5); the orchestrator presents them and feeds answers back down.
+- Subagent results are not visible to the user — the orchestrator relays every question, boundary set, plan, and summary in its own message.
 
-## Consistency Gates
+## Shared invariants (enforced by Stages 1/4/5)
 
-- Input and Config Agent protects input schema and enum semantics.
-- Persistence, UI, and Postprocess Agent protects DB schema compatibility and UI callback contracts.
-- Execution Pipeline Agent protects model and job lifecycle state transitions.
-- Runtime Lead Agent validates algorithm and runtime coherence before completion.
+- A keyword/setting change ripples to `default_settings.py` + `user_input.py` + every consumer + the `kmo_start` GUI.
+- A DB schema change updates runtime writers and `kmoui` readers in lockstep, with a migration path.
+- SOP / RateCo / SIM contract changes are coordinated across chemistry, model, HPC, database, and GUI.
+- `ModelStatus` / `JobStatus` transitions stay valid and monotonic; GOAT indexing/`Scoring` signatures stay stable across their consumers.
+- Cross-system integration stays interface-only (public APIs, schemas, settings keys).
 
-## Shared Invariants
-
-- ModelStatus and JobStatus transitions remain valid and monotonic where expected.
-- SOP, KIN, and SIM DB table contracts stay compatible unless an explicit migration task is requested.
-- GOAT generation indexing and file semantics remain stable.
-- The `GOATs.from_file` / `Scoring` (scoring_f) contract is owned by Execution Pipeline Agent; changes require Runtime Lead sign-off and lockstep updates to GUI consumers (persistence-ui-postprocess).
+The full system/file map lives in `scope-assessment.agent.md` (for impact analysis) and `planning.agent.md` (for where to edit). The safe modify/freeze boundaries for a given change are set by `boundaries.agent.md` and validated by the user before planning.
