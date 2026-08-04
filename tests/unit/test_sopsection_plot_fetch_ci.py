@@ -14,6 +14,8 @@ from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
 from kimeco.database.sop_db import SOP_DB
+from kimeco.database.kimeco_db import dbs
+from kimeco.enums import Ptype
 from kimeco.goat import GOATs
 
 
@@ -287,3 +289,108 @@ def test_score_values_are_byte_identical_to_persisted_scores(
     plotted = hist.data[0]
     assert np.array_equal(plotted, expected)
     assert plotted.tobytes() == expected.tobytes()
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for SOPSection.get_boundaries (the Score-plot crash fix).
+#
+# Before the fix, get_boundaries delegated *every* column to
+# Perturbator.get_boundaries, which raises NotImplementedError('Parameter not
+# parametrised.') for Ptype.SCORE ('score') because SCORE is a computed output
+# absent from the ADDITIVE/PERCENT/MULTIPLICATIVE classes. Plotting the
+# "Score" parameter therefore crashed. The fix returns [init_val, init_val]
+# for the score path and never touches the perturbator.
+# ---------------------------------------------------------------------------
+
+SCORE_COL = f'exp_000{dbs}score'   # e.g. "exp_000__score"
+WE_COL = f'LEFT{dbs}we'            # a perturbed well-energy column
+
+
+class SpyPert:
+    """Fake perturbator recording get_boundaries calls.
+
+    When ``raise_not_impl`` is set it mimics the real Perturbator, which raises
+    NotImplementedError for unparametrised (e.g. score) columns. This lets a
+    test prove the score path never reaches the perturbator.
+    """
+
+    def __init__(self,
+                 result: tuple[float, float] = (10.0, 20.0),
+                 raise_not_impl: bool = False) -> None:
+        self.result = result
+        self.raise_not_impl = raise_not_impl
+        self.calls: list[dict[str, Any]] = []
+
+    def get_boundaries(self, ptype: str, i_val: float) -> tuple[float, float]:
+        self.calls.append({'ptype': ptype, 'i_val': i_val})
+        if self.raise_not_impl:
+            raise NotImplementedError('Parameter not parametrised.')
+        return self.result
+
+
+def _make_boundaries_section(columns: list[str],
+                             init_vals: list[float],
+                             pert: Any) -> SOPSection:
+    """Build a SOPSection using the *real* get_boundaries (not stubbed)."""
+    sec = SOPSection.__new__(SOPSection)
+    sec.sop_db = cast(Any, SimpleNamespace(columns=list(columns)))
+    sec.gapp = cast(Any, SimpleNamespace(init_vals=list(init_vals)))
+    sec.pert = cast(Any, pert)
+    return sec
+
+
+def test_get_boundaries_score_returns_degenerate_and_skips_pert() -> None:
+    columns = [WE_COL, SCORE_COL]
+    # init_vals is 1-indexed (index 0 is the id column); pick a distinct known
+    # score init value so [init_val, init_val] is unambiguous.
+    init_vals = [999.0, 111.0, 222.0]
+    pert = SpyPert(raise_not_impl=True)
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    bounds = sec.get_boundaries(SCORE_COL)
+
+    # Degenerate boundary (lb == ub) equal to the score's init value, and the
+    # perturbator (which would raise) is never consulted.
+    assert bounds == [0.0, 222.0]
+    assert pert.calls == []
+
+
+def test_get_boundaries_perturbed_column_still_delegates() -> None:
+    columns = [WE_COL, SCORE_COL]
+    init_vals = [999.0, 111.0, 222.0]
+    pert = SpyPert(result=(100.0, 122.0))
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    bounds = sec.get_boundaries(WE_COL)
+
+    # Non-score behaviour is unchanged: delegated to the perturbator with the
+    # right ptype/init value, and the tuple is passed through as a list.
+    assert pert.calls == [{'ptype': Ptype.WE.value, 'i_val': 111.0}]
+    assert bounds == [100.0, 122.0]
+    assert isinstance(bounds, list)
+
+
+def test_make_figure_over_score_skips_brown_boundary_vlines() -> None:
+    columns = [SCORE_COL]
+    init_vals = [0.0, 55.0]
+    pert = SpyPert(raise_not_impl=True)
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    # End-to-end: real get_boundaries feeds real make_figure. Plotting Score
+    # must not raise and must skip the brown boundary vlines (lb == ub).
+    boundaries = sec.get_boundaries(SCORE_COL)
+    children = sec.make_figure(
+        boundaries=boundaries,
+        plot_settings={'title': SCORE_COL, 'tickformat': '.2f', 'unit': ''},
+        col=SCORE_COL,
+        per_gen_values={0: {SCORE_COL: np.array([0.5, 0.6])}},
+    )
+
+    assert boundaries == [0.0, 55.0]
+    assert pert.calls == []
+    hist = FakeHistogram.instances[0]
+    assert children == [hist]
+    colors = [vl.get('line_color') for vl in hist.vlines]
+    # Only the black init-value line; no brown boundary lines.
+    assert colors == ['black']
+    assert 'brown' not in colors

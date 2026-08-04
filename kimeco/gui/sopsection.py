@@ -242,6 +242,8 @@ class SOPSection(Section):
         for ptype in Ptype:
             if ptype.value in param:
                 break
+        if ptype == Ptype.SCORE:  # computed output, no perturbation bounds
+            return [0, init_val]
         return list(self.pert.get_boundaries(
             ptype=ptype.value,
             i_val=init_val))

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In the GUI KIN section, reaction pair selection now uses only wells and bimolecular species (fragments excluded), labels entries as `NAME [PES XX]`, enforces same-PES `From`/`To` pairing with reciprocal filtering and auto-clear of invalid selections, and blocks invalid cross-PES plotting with an explanatory message.
 
 ### Fixed
+- Plotting the `Score` parameter in the SOP GUI subsection ("Type of parameter to plot" → Plot) no longer raises `NotImplementedError: Parameter not parametrised.`. The `Score` output is a computed value (not a perturbed parameter), so `get_boundaries` now returns a `[0.0, init_val]` range for it instead of querying the perturbator, and its histogram plots correctly. Non-score parameters are unaffected.
 - SOP parameter plotting in the analysis GUI no longer risks crashing from memory exhaustion, since it no longer redundantly rebuilds models and rescores once per selected parameter before plotting.
 
 ## [1.0.4] - 2026-07-23
