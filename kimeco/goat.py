@@ -165,23 +165,57 @@ class GOATs:
             raise RuntimeError(f"Failed to retrieve SOP rows: {exc}") from exc
 
         # Map rows to Models
+        # Build one id->row-slice map per table once (O(n) lookups).
+        row_maps: Dict[str, Dict[int, NDArray]] = {}
+        for table, table_rows in rows.items():
+            arr = np.array(table_rows)
+            row_maps[table] = {
+                int(arr[i, 0]): arr[i, 1:] for i in range(arr.shape[0])
+            }
+
         for gen_id, mdl_id in zip(gen_ids, mdl_ids):
-            # drop the id column and reconstruct SOP
-            table_rows = np.array(rows[f'{self.prefix}{gen_id:04d}'])
-            row = table_rows[table_rows[:, 0] == mdl_id][:, 1:]
-            if len(row) != 1:
+            table = f"{self.prefix}{gen_id:04d}"
+            row = row_maps.get(table, {}).get(mdl_id)
+            if row is None:
                 msg = "Expected exactly one row for id "
-                msg += f"{mdl_id} in table G{gen_id:04d}, found {len(row)}"
+                msg += f"{mdl_id} in table G{gen_id:04d}, found 0"
                 raise ValueError(msg)
             sop_obj = self.sop_db.sop_tpl.__class__.from_db_row(
                 sop_tpl=self.sop_db.sop_tpl,
-                row=row[0]
+                row=row
             )
             mdl = Model(sop=sop_obj, id=mdl_id, gen=gen_id)
             self.sf.fscore(mdl=mdl)
             models.append(mdl)
 
         return models
+
+    def get_goat_param_values(self,
+                              gen: int,
+                              cols: List[str]) -> Dict[str, NDArray]:
+        """Return requested SOP column values for a generation's GOAT models.
+
+        Unlike get_goat_for_gen, this does not reconstruct SOP/Model objects
+        nor compute scores. It returns the requested column values keyed by
+        column name, assembled in GOAT token order.
+        """
+        if gen == -1:
+            gen = len(self.generations) - 1
+        if gen < 0 or gen >= len(self.generations):
+            raise IndexError("Generation number out of range")
+
+        for gen_origin, mdl_id in self.generations[gen]:
+            table: str = f"{self.prefix}{gen_origin:04d}"
+            self.sop_db.prepare_batch_select(table=table, row_id=mdl_id)
+
+        raw = self.sop_db.batch_select_cols(cols=cols)
+
+        per_col: Dict[str, List[Any]] = {c: [] for c in cols}
+        for (g, m) in self.generations[gen]:
+            vals = raw[f"{self.prefix}{g:04d}"][m]
+            for ci, c in enumerate(cols):
+                per_col[c].append(vals[ci])
+        return {c: np.array(v) for c, v in per_col.items()}
 
     def update_with_generation(self,
                                models: List[Model],
@@ -373,15 +407,15 @@ class GOATs:
             dict mapping param_name -> np.array(values)
 
         """
-        
         for (gen_origin, mdl_id) in self.generations[gen_id]:
             table: str = f"{self.prefix}{gen_origin:04d}"
             self.sop_db.prepare_batch_select(table=table, row_id=mdl_id)
 
         # Execute batched select once
-        raw_cols: List[Tuple[Any]] = self.sop_db.batch_select_cols(cols=params)
-
-        return np.array(raw_cols)
+        raw = self.sop_db.batch_select_cols(cols=params)
+        rows = [raw[f"{self.prefix}{g:04d}"][m]
+                for (g, m) in self.generations[gen_id]]
+        return np.array(rows)
 
     def __len__(self) -> int:
         return len(self.generations)

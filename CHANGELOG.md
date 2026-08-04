@@ -9,10 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - TimeProfile data/error CSVs now accept an optional bracketed time unit on the first-column header (e.g. `time[s]`, `TIME [ms]`, `time[1e-3s]`, `time[1e-3]`). The `time` token is case-insensitive and whitespace tolerant; Cantera time units plus `ms`/`millisecond(s)` aliases and numeric-factor forms are supported, with seconds assumed when no bracket is given. A new `TimeProfile.time` property exposes the seconds-normalized time grid.
+- New public accessor `GOATs.get_goat_param_values(gen, cols)` returning `dict[str, np.ndarray]` of the requested SOP columns for a generation, in GOAT token order, without reconstructing models or running scoring (`gen == -1` selects the last generation; out-of-range raises `IndexError`).
 
 ### Changed
+- The SOP GUI plotting subsection ("Type of parameter to plot" → Plot) now fetches each selected generation's data once for all selected columns instead of reconstructing full SOP/Model objects and running scoring per parameter, making parameter plotting much faster. Plotted values (including the Score parameter) are byte-identical to before and the UX is unchanged (one overlaid-histogram figure per selected column).
+- Internal `GOATs.get_goat_for_gen` row matching reduced from O(n²) to O(n) via an id→row map, and `GOATs.get_p_for_gen` optimized in place; observable behavior is unchanged (rows now returned in deterministic GOAT token order, identical shapes/dtypes and error contracts).
+- API note: `database.sop_db.batch_select_cols` now returns an id-keyed `dict` of the form `{table: {row_id: (col_values...)}}` (the row id is included in each entry) and no longer emits an empty `.where()` clause.
 - TimeProfile time grids are normalized to seconds on read (species columns untouched), and data/error files may declare different time units as long as their converted-seconds grids match (compared with a numerical tolerance).
 - In the GUI KIN section, reaction pair selection now uses only wells and bimolecular species (fragments excluded), labels entries as `NAME [PES XX]`, enforces same-PES `From`/`To` pairing with reciprocal filtering and auto-clear of invalid selections, and blocks invalid cross-PES plotting with an explanatory message.
+
+### Fixed
+- SOP parameter plotting in the analysis GUI no longer risks crashing from memory exhaustion, since it no longer redundantly rebuilds models and rescores once per selected parameter before plotting.
 
 ## [1.0.4] - 2026-07-23
 

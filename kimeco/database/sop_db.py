@@ -284,24 +284,27 @@ class SOP_DB(Kimeco_db):
         return all_db_rslt
 
     def batch_select_cols(self,
-                          cols: list[str]) -> list[tuple[Any]]:
+                          cols: list[str]
+                          ) -> dict[str, dict[int, tuple[Any, ...]]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
-            dict[int, list[list[Any]]]:
-            A dictionary with sop_id as keys and lists
-            of the corresponding (col) data as values.
+            dict[str, dict[int, tuple[Any, ...]]]:
+            A dictionary keyed by table name, each mapping row id to a
+            tuple of the requested (col) values.
         """
-        all_db_rslt = []
+        all_db_rslt: dict[str, dict[int, tuple[Any, ...]]] = {}
         for table in self._select:
             row_ids = self._select[table]
-            column_references = [self.tables[table].c[col] for col in cols]
+            id_col = self.tables[table].c.id
+            column_references = [id_col] + \
+                [self.tables[table].c[col] for col in cols]
             query = select(*column_references).where(
-                    ).where(
-                        self.tables[table].c.id.in_(row_ids))
+                id_col.in_(row_ids))
             with self.eng.begin() as conn:
                 db_rslt: Sequence[Row[Any]] = \
                     conn.execute(query).fetchall()
-            all_db_rslt.extend(db_rslt)
+            all_db_rslt[table] = {
+                row[0]: tuple(row[1:]) for row in db_rslt}
         self._select = {}  # Clear the _select dictionary after processing
         return all_db_rslt

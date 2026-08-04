@@ -185,6 +185,12 @@ class SOPSection(Section):
             if clic == 0 or clic is None:
                 raise PreventUpdate
 
+            per_gen_values: dict[int, dict[str, np.ndarray]] = {
+                gen_i: self.gapp.goats.get_goat_param_values(
+                    gen_i, param_selected)
+                for gen_i in selected_gen
+            }
+
             sop_plot_children = []
             for col in param_selected:
                 boundaries: list[float] = self.get_boundaries(col)
@@ -196,7 +202,7 @@ class SOPSection(Section):
                         boundaries=boundaries,
                         plot_settings=plot_settings,
                         col=col,
-                        selected_gen=selected_gen
+                        per_gen_values=per_gen_values
                     )
                 )
             return ({'display': 'block'},
@@ -315,28 +321,17 @@ class SOPSection(Section):
                     boundaries: list[float],
                     plot_settings: dict,
                     col: str,
-                    selected_gen: list[int]):
+                    per_gen_values: dict[int, dict[str, np.ndarray]]):
         # Add line for initial value to the graph
         idx: int = self.sop_db.columns.index(col)
         init_val: float = self.gapp.init_vals[idx+1]
 
-        all_gen_rows: dict[int, Any] = {}
-        for gen_i in selected_gen:
-            # Use GOATs Model objects to extract parameter values
-            models = self.gapp.goats.get_goat_for_gen(gen_i)
-            values: list[float] = []
-            for mdl in models:
-                try:
-                    val = mdl.sop.parameters_names[col]
-                except Exception:
-                    raise KeyError(
-                        f"Parameter {col} not found in SOP for model {mdl.id}"
-                    )
-                values.append(val)
-            all_gen_rows[gen_i] = np.array(values)
+        data: dict[int, np.ndarray] = {
+            gen_i: per_gen_values[gen_i][col] for gen_i in per_gen_values
+        }
 
         hist = Histogram(
-            data=all_gen_rows,
+            data=data,
             settings=plot_settings
         )
         hist.add_vline(x=init_val,
