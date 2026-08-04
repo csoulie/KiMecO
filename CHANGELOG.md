@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- TimeProfile data/error CSVs now accept an optional bracketed time unit on the first-column header (e.g. `time[s]`, `TIME [ms]`, `time[1e-3s]`, `time[1e-3]`). The `time` token is case-insensitive and whitespace tolerant; Cantera time units plus `ms`/`millisecond(s)` aliases and numeric-factor forms are supported, with seconds assumed when no bracket is given. A new `TimeProfile.time` property exposes the seconds-normalized time grid.
+
 ### Changed
+- TimeProfile time grids are normalized to seconds on read (species columns untouched), and data/error files may declare different time units as long as their converted-seconds grids match (compared with a numerical tolerance).
 - In the GUI KIN section, reaction pair selection now uses only wells and bimolecular species (fragments excluded), labels entries as `NAME [PES XX]`, enforces same-PES `From`/`To` pairing with reciprocal filtering and auto-clear of invalid selections, and blocks invalid cross-PES plotting with an explanatory message.
 
 ## [1.0.4] - 2026-07-23

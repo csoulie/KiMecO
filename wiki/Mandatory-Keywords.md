@@ -82,3 +82,27 @@ Each experiment entry should be a dictionary with the following keys:
 | initial_ratio | none (required if not concentration) | Initial mixture as species:fraction pairs. Exactly one of initial_ratio or initial_concentration must exist. |
 | initial_concentration | none (required if not ratio) | Initial mixture as species:molecule_count pairs. Converted to mole fractions internally. Bath gas is denoted with value "base". Must be the same as used in the MESS template. |
 | w_species | {} | Optional per-species scoring weights for this experiment. |
+
+### 1.3.2 Data/error CSV time column and units
+
+The first column of every `data_file` / `error_file` CSV must be the time
+column. Its header is `time` and is **case-insensitive** and whitespace
+tolerant. An optional bracketed unit may be appended to declare the unit of
+the time values; KiMecO always normalizes and stores the time grid in
+**seconds**. Accepted header forms:
+
+| Header form | Meaning |
+|---|---|
+| `time` | Values already in seconds (default). |
+| `time[s]`, `time[min]`, `time[us]` | Cantera-recognized time units. |
+| `time[ms]`, `time[millisecond]`, `time[milliseconds]` | Milliseconds (aliases). |
+| `time[1e-3s]`, `time[0.001 s]`, `time[1E-3s]` | Numeric factor combined with a unit. |
+| `time[1e-3]` | Factor-only form (no unit token) interpreted as a multiplier to seconds. |
+
+Notes:
+- The `time` token is case-insensitive (e.g. `Time`, `TIME` are accepted).
+- Whitespace inside and around the brackets is tolerated.
+- An unknown or non-time unit (e.g. `time[kg]`), an empty bracket
+  (`time[]`), or a malformed header raises a `ValueError` during ingestion.
+- The data and error grids are compared in seconds with a numerical
+  tolerance, so equivalent grids expressed in different units still match.

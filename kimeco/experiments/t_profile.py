@@ -2,6 +2,7 @@ import io
 from copy import deepcopy
 import os
 import csv
+import re
 import string
 from typing import Any
 import numpy as np
@@ -36,6 +37,7 @@ class TimeProfile(Experiment):
                  species: list[str],
                  data: NDArray,
                  error: NDArray,
+                 time_unit: str = 's',
                  new_tpl: bool = True,
                  tpl_idx: int = 0,
                  weight: float = 1.0) -> None:
@@ -56,6 +58,7 @@ class TimeProfile(Experiment):
         self.error_file: str = error_file
         self.data: NDArray = data
         self.error: NDArray = error
+        self.time_unit: str = time_unit
 
     @classmethod
     def from_db(cls,
@@ -69,10 +72,78 @@ class TimeProfile(Experiment):
         del exp.error
         return exp
 
+    @staticmethod
+    def _unit_to_seconds(unit: str) -> float:
+        """Convert a time unit token to its factor in seconds.
+
+        Args:
+            unit (str): Time unit token (e.g. 's', 'min', 'us', 'ms').
+
+        Raises:
+            ValueError: If the unit is unknown or not a time unit.
+
+        Returns:
+            float: Multiplicative factor to convert the unit to seconds.
+        """
+        if unit.lower() in {'ms', 'millisecond', 'milliseconds'}:
+            return 1e-3
+        try:
+            val = Q_(1.0, unit).to('s').magnitude
+            return float(val)
+        except Exception:
+            raise ValueError(f"Unknown or non-time unit {unit!r}")
 
     @staticmethod
-    def read_data(file: str) -> tuple[list[str], NDArray]:
+    def _parse_time_header(header: str) -> tuple[bool, str, float]:
+        """Parse the first-column header for an optional time unit.
+
+        Accepts a bare ``time`` token (case-insensitive, whitespace
+        tolerant) with an optional bracketed unit such as ``time[ms]``,
+        ``time[1e-3s]`` or a factor-only ``time[1e-3]``.
+
+        Args:
+            header (str): Raw first-column header string.
+
+        Raises:
+            ValueError: If the header or its time unit is malformed.
+
+        Returns:
+            tuple[bool, str, float]:
+                (is_time_token, raw_unit_str, to_seconds_factor).
+        """
+        outer = re.match(r'^\s*([A-Za-z]+)\s*(?:\[\s*(.*?)\s*\])?\s*$', header)
+        if outer is None:
+            raise ValueError(f"Malformed time header {header!r}")
+        token = outer.group(1)
+        is_time = token.lower() == 'time'
+        if not is_time:
+            return (False, 's', 1.0)
+        bracket = outer.group(2)
+        if bracket is None:
+            return (True, 's', 1.0)
+        if bracket == '':
+            raise ValueError(f"Malformed time unit in header {header!r}")
+        inner = re.match(r'^\s*([0-9.eE+\-]*)\s*([A-Za-z]*)\s*$', bracket)
+        if inner is None:
+            raise ValueError(f"Malformed time unit in header {header!r}")
+        n = inner.group(1)
+        u = inner.group(2)
+        if u == '' and n == '':
+            raise ValueError(f"Malformed time unit in header {header!r}")
+        if u == '':
+            factor = float(n)
+            return (True, bracket, factor)
+        base = TimeProfile._unit_to_seconds(u)
+        factor = (float(n) if n != '' else 1.0) * base
+        return (True, bracket, factor)
+
+    @staticmethod
+    def read_data(file: str) -> tuple[list[str], NDArray, str]:
         """Read the data file for this experiment
+
+        The first column must be ``time`` (case-insensitive) and may
+        carry an optional bracketed unit (e.g. ``time[ms]``). The time
+        grid is normalized to seconds and the parsed unit is returned.
 
         Args:
             file (str): path to file
@@ -82,11 +153,13 @@ class TimeProfile(Experiment):
             KeyError: if the first column is not 'time'
             TypeError: if any value cannot be converted to float
             ValueError: if there are no data rows
+            ValueError: if the time unit header is unknown or malformed
 
         Returns:
-            tuple[list[str], NDArray]:
-                headers and row-oriented matrix where row 0 is time and
-                rows 1..N are species.
+            tuple[list[str], NDArray, str]:
+                headers, row-oriented matrix where row 0 is time (in
+                seconds) and rows 1..N are species, and the raw time
+                unit string parsed from the header.
         """
         if not os.path.isfile(file):
             msg: str = f'Could not find file {file}'
@@ -97,7 +170,9 @@ class TimeProfile(Experiment):
             headers = list(reader.fieldnames or [])
             if headers is None or len(headers) == 0:
                 raise ValueError(f"Empty CSV header in {file}")
-            if headers[0] != 'time':
+            is_time, time_unit, to_seconds = \
+                TimeProfile._parse_time_header(headers[0])
+            if not is_time:
                 raise KeyError(
                     f"The first column should be 'time' in file {file}."
                 )
@@ -114,8 +189,10 @@ class TimeProfile(Experiment):
                 rows.append(row)
         if len(rows) == 0:
             raise ValueError(f'No data rows in file {file}')
+        headers[0] = 'time'
         matrix: NDArray = np.array(rows, dtype=float).T
-        return headers, matrix
+        matrix[0] = matrix[0] * to_seconds
+        return headers, matrix, time_unit
 
     @staticmethod
     def validate_pair(data_headers: list[str],
@@ -138,6 +215,10 @@ class TimeProfile(Experiment):
             ValueError: If headers do not match
             ValueError: If shapes do not match
             ValueError: If time grids do not match
+
+        Note:
+            Time grids are compared in seconds with a numerical
+            tolerance (``np.allclose``).
         """
         if data_headers != error_headers:
             msg = f'Headers mismatch between {data_file} and {error_file}.'
@@ -148,7 +229,7 @@ class TimeProfile(Experiment):
                 f'and {error_file}.'
             )
             raise ValueError(msg)
-        if not np.array_equal(data[0], error[0]):
+        if not np.allclose(data[0], error[0]):
             msg = f'Time grid mismatch between {data_file} and {error_file}.'
             raise ValueError(msg)
 
@@ -163,6 +244,11 @@ class TimeProfile(Experiment):
             return self._legend
         else:
             return self.species
+
+    @property
+    def time(self) -> NDArray:
+        """Time grid in seconds."""
+        return self.data[0]
 
     def _set_legend(self,
                     legend: list[str] | None) -> None:

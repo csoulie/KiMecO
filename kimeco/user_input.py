@@ -431,8 +431,9 @@ class KMOInput:
                 tpl_content = self._validate_tpl(tpl_path)
                 ratio = self._initial_ratio_from_exp(exp_cfg)
 
-                data_headers, data = TimeProfile.read_data(file=data_path)
-                err_headers, err = TimeProfile.read_data(file=err_path)
+                data_headers, data, data_unit = TimeProfile.read_data(
+                    file=data_path)
+                err_headers, err, _ = TimeProfile.read_data(file=err_path)
                 TimeProfile.validate_pair(
                     data_headers=data_headers,
                     data=data,
@@ -466,6 +467,7 @@ class KMOInput:
                     weight=float(exp_cfg.get('weight', 1.0)),
                     data=data,
                     error=err,
+                    time_unit=data_unit,
                     new_tpl=new_tpl,
                     tpl_idx=tpl_idx
                 )
