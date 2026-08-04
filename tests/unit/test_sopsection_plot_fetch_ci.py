@@ -394,3 +394,57 @@ def test_make_figure_over_score_skips_brown_boundary_vlines() -> None:
     # Only the black init-value line; no brown boundary lines.
     assert colors == ['black']
     assert 'brown' not in colors
+
+
+def test_make_figure_non_score_still_draws_brown_boundary_vlines() -> None:
+    columns = [WE_COL, SCORE_COL]
+    # WE_COL is at columns index 0, so its init value is init_vals[0 + 1].
+    init_vals = [999.0, 111.0, 222.0]
+    pert = SpyPert(result=(100.0, 122.0))
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    # Regression guard: the score fix must NOT suppress brown boundary vlines
+    # on the normal perturbed path when lb != ub.
+    children = sec.make_figure(
+        boundaries=[100.0, 122.0],
+        plot_settings={'title': WE_COL, 'tickformat': '.2f', 'unit': ''},
+        col=WE_COL,
+        per_gen_values={0: {WE_COL: np.array([100.5, 121.5])}},
+    )
+
+    hist = FakeHistogram.instances[0]
+    assert children == [hist]
+    colors = [vl.get('line_color') for vl in hist.vlines]
+    # Order preserved: black init line first, then the two brown boundaries.
+    assert colors == ['black', 'brown', 'brown']
+    assert 'brown' in colors
+
+    black_x = [vl['x'] for vl in hist.vlines
+               if vl.get('line_color') == 'black']
+    brown_x = {vl['x'] for vl in hist.vlines
+               if vl.get('line_color') == 'brown'}
+    # Black line sits at WE_COL's init value (init_vals[idx + 1] = 111.0).
+    assert black_x == [111.0]
+    assert brown_x == {100.0, 122.0}
+
+
+def test_make_figure_non_score_degenerate_bounds_only_black() -> None:
+    columns = [WE_COL, SCORE_COL]
+    init_vals = [999.0, 111.0, 222.0]
+    pert = SpyPert(result=(7.0, 7.0))
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    # lb == ub on a non-score column: the untouched degenerate-bounds gate
+    # still suppresses the brown vlines, leaving only the black init line.
+    children = sec.make_figure(
+        boundaries=[7.0, 7.0],
+        plot_settings={'title': WE_COL, 'tickformat': '.2f', 'unit': ''},
+        col=WE_COL,
+        per_gen_values={0: {WE_COL: np.array([6.9, 7.1])}},
+    )
+
+    hist = FakeHistogram.instances[0]
+    assert children == [hist]
+    colors = [vl.get('line_color') for vl in hist.vlines]
+    assert colors == ['black']
+    assert 'brown' not in colors

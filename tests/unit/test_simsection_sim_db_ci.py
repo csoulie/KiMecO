@@ -21,20 +21,21 @@ def _blob_from_dict(data: dict[str, list[float]]) -> bytes:
 
 def test_make_figure_uses_nested_sim_db_results_for_species_trace() -> None:
     section = SIMSection.__new__(SIMSection)
+    exp = SimpleNamespace(
+        exp_type='Time profile',
+        P=1.0,
+        T=300.0,
+        species=['A'],
+        data=np.array([[0.0, 1.0], [1.0, 0.25]], dtype=float),
+        error=np.array([[0.0, 1.0], [0.1, 0.1]], dtype=float),
+    )
     section.settings = {
         'pres_unit': 'atm',
         'rc_pres': [1.0],
         'rc_temp': [300.0],
-        'experiments': [
-            SimpleNamespace(
-                P=1.0,
-                T=300.0,
-                species=['A'],
-                data=np.array([[0.0, 1.0], [1.0, 0.25]], dtype=float),
-                error=np.array([[0.0, 1.0], [0.1, 0.1]], dtype=float),
-            )
-        ],
+        'experiments': [exp],
     }
+    section.pp_experiments = [exp]
 
     rows = np.array(
         [
@@ -46,9 +47,8 @@ def test_make_figure_uses_nested_sim_db_results_for_species_trace() -> None:
     rendered = section.make_figure(
         gen_name='G0000',
         TPGenSP={'G0000': {7: {0: rows}}},
+        experiment_id=0,
         sp='A',
-        pres=1.0,
-        temp=300.0,
         sim_db=cast(Any, SimpleNamespace(sv_species=['A'])),
         show_exp_profile=False,
     )
@@ -95,3 +95,74 @@ def test_get_pp_condition_profiles_filters_by_experiment_id(
     assert sorted(out['G0000']) == [3]
     assert sorted(out['G0000'][3]) == [1]
     assert out['G0000'][3][1][0, 2] == 2.0
+
+
+def test_get_regular_condition_profiles_filters_by_experiment_id(
+    tmp_path: Path,
+) -> None:
+    sim_db = SIM_DB(name='TEST_REG_SIM_DB', path=str(tmp_path), threads=1)
+    sim_db.create_new_table(name='G0000')
+    sim_db.prepare_batch_upsert(
+        table='G0000',
+        mdl_id=5,
+        experiment_id=0,
+        result=_blob_from_dict({'time': [0.0], 'A': [1.0]}),
+    )
+    sim_db.prepare_batch_upsert(
+        table='G0000',
+        mdl_id=5,
+        experiment_id=1,
+        result=_blob_from_dict({'time': [0.0], 'A': [2.0]}),
+    )
+    sim_db.batch_upsert()
+
+    section = SIMSection.__new__(SIMSection)
+    section.sim_db = sim_db
+    section.gapp = cast(
+        Any,
+        SimpleNamespace(
+            goats=SimpleNamespace(generations={0: [(0, 5)]}),
+        ),
+    )
+
+    out = section.get_regular_condition_profiles(
+        selected_gen=[0],
+        experiment_id=1,
+    )
+
+    assert len(out) == 1
+    # Only the requested experiment_id blob is returned.
+    assert sorted(out[0]['G0000'][5]) == [1]
+    assert out[0]['G0000'][5][1][0, 2] == 2.0
+
+
+def test_get_regular_condition_profiles_missing_experiment_id(
+    tmp_path: Path,
+) -> None:
+    sim_db = SIM_DB(name='TEST_REG_SIM_DB_MISS', path=str(tmp_path), threads=1)
+    sim_db.create_new_table(name='G0000')
+    sim_db.prepare_batch_upsert(
+        table='G0000',
+        mdl_id=5,
+        experiment_id=0,
+        result=_blob_from_dict({'time': [0.0], 'A': [1.0]}),
+    )
+    sim_db.batch_upsert()
+
+    section = SIMSection.__new__(SIMSection)
+    section.sim_db = sim_db
+    section.gapp = cast(
+        Any,
+        SimpleNamespace(
+            goats=SimpleNamespace(generations={0: [(0, 5)]}),
+        ),
+    )
+
+    # No rows for experiment_id=9 -> no raise, empty per-gen mapping.
+    out = section.get_regular_condition_profiles(
+        selected_gen=[0],
+        experiment_id=9,
+    )
+
+    assert len(out) == 1
+    assert out[0].get('G0000', {}) == {}

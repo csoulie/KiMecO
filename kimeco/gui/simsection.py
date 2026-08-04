@@ -1,13 +1,18 @@
 from typing import Any, cast
 
+import cantera.with_units as ctu
 from dash import Input, Output, State, callback, dcc, html
 from dash.exceptions import PreventUpdate
 import numpy as np
 from numpy.typing import NDArray
 import plotly.graph_objects as go
 from kimeco.database.sim_db import SIM_DB
+from kimeco.experiments.t_profile import TimeProfile
 from kimeco.gui.section import Section
 from kimeco.gui.sim_plot import apply_profile_layout
+
+ureg = ctu.cantera_units_registry
+Q_ = ureg.Quantity
 
 
 class SIMSection(Section):
@@ -16,9 +21,32 @@ class SIMSection(Section):
         self.species: list[str] = self.sim_db.sv_species
         self.pp_species: list[str] = []
         self.pp_tables: list[str] = []
+        self.experiments: list = self.settings['experiments']
+        self.pp_experiments: list = self.settings.get('pp_experiments', [])
         if self.pp_sim_db is not None:
             self.pp_species = self.pp_sim_db.sv_species
             self.pp_tables = sorted(self.pp_sim_db.tables.keys())
+
+    def _experiment_label(self,
+                          exp,
+                          experiment_id: int,
+                          settings: dict[str, Any]) -> str:
+        if isinstance(exp, TimeProfile):
+            P_bar = Q_(exp.P, 'Pa').to('bar').magnitude
+            return (
+                f"{exp.exp_type} #{experiment_id} — "
+                f"{P_bar:.4g} {settings['pres_unit']}, {exp.T:g} K — "
+                f"{', '.join(exp.species)}"
+            )
+        return f'{exp.exp_type} #{experiment_id}'
+
+    def _experiment_options(self, source: str) -> list[dict]:
+        exps = self.pp_experiments if source == 'PP' else self.experiments
+        return [
+            {'label': self._experiment_label(exp, i, self.settings),
+             'value': i}
+            for i, exp in enumerate(exps)
+        ]
 
     @property
     def layout(self) -> html.Div:
@@ -49,23 +77,11 @@ class SIMSection(Section):
                         ),
                     ],
                 ),
-                html.H4('Species to visualize'),
+                html.H4('Experiments to visualize'),
                 dcc.Dropdown(
-                    options=[sp for sp in self.species],
+                    options=cast(Any, self._experiment_options('REG')),
                     multi=True,
-                    id='selected species',
-                ),
-                html.H4(f'Pressure ({self.settings["pres_unit"]}):'),
-                dcc.Dropdown(
-                    options=[p for p in self.settings['rc_pres']],
-                    multi=True,
-                    id='sim_P',
-                ),
-                html.H4('Temperature (K):'),
-                dcc.Dropdown(
-                    options=[t for t in self.settings['rc_temp']],
-                    multi=True,
-                    id='sim_T',
+                    id='experiment',
                 ),
                 html.Div(
                     id='show_sim_plot_button',
@@ -83,9 +99,7 @@ class SIMSection(Section):
 
     def register_callbacks(self):
         @callback(
-            Output('selected species', 'options'),
-            Output('sim_P', 'options'),
-            Output('sim_T', 'options'),
+            Output('experiment', 'options'),
             Output('pp_sim_tables_container', 'style'),
             Output('pp_sim_tables', 'options'),
             Input('sim_source', 'value'),
@@ -93,17 +107,13 @@ class SIMSection(Section):
         def update_sim_source(source: str):
             if source == 'PP':
                 return (
-                    [sp for sp in self.pp_species],
-                    [p for p in self.settings.get('pp_pres', [])],
-                    [t for t in self.settings.get('pp_temp', [])],
+                    cast(Any, self._experiment_options('PP')),
                     {'display': 'block'},
                     self.pp_tables,
                 )
 
             return (
-                [sp for sp in self.species],
-                [p for p in self.settings['rc_pres']],
-                [t for t in self.settings['rc_temp']],
+                cast(Any, self._experiment_options('REG')),
                 {'display': 'none'},
                 self.pp_tables,
             )
@@ -111,17 +121,13 @@ class SIMSection(Section):
         @callback(
             Output('show_sim_plot_button', 'style'),
             Input('sim_source', 'value'),
-            Input('selected species', 'value'),
-            Input('sim_P', 'value'),
-            Input('sim_T', 'value'),
+            Input('experiment', 'value'),
             Input('pp_sim_tables', 'value'),
         )
         def show_sim_plot_button(source: str,
-                                 specs: list[str],
-                                 pres: list | float,
-                                 temp: list | float,
+                                 experiments: list[int] | int,
                                  pp_tables: list[str]):
-            if specs is None or pres is None or temp is None:
+            if not experiments:
                 raise PreventUpdate
             if source == 'PP' and not pp_tables:
                 raise PreventUpdate
@@ -132,9 +138,7 @@ class SIMSection(Section):
             Output('sim_plot', 'children'),
             Input('show_sim_plot_button', 'n_clicks'),
             State('sim_source', 'value'),
-            State('selected species', 'value'),
-            State('sim_P', 'value'),
-            State('sim_T', 'value'),
+            State('experiment', 'value'),
             State('pp_sim_tables', 'value'),
             State('gen range slider', 'value'),
             prevent_initial_call=True,
@@ -145,71 +149,70 @@ class SIMSection(Section):
         )
         def update_sim_figure(clic,
                               source: str,
-                              specs: list[str],
-                              pres: list | float,
-                              temp: list | float,
+                              experiments: list[int] | int,
                               pp_tables: list[str],
                               selected_gen: list[int]):
-            if clic is None or specs is None or pres is None or temp is None:
+            if clic is None or not experiments:
                 raise PreventUpdate
 
-            if not isinstance(specs, (list, tuple, np.ndarray)):
-                specs = [specs]
-            if not isinstance(pres, (list, tuple, np.ndarray)):
-                pres = [pres]
-            if not isinstance(temp, (list, tuple, np.ndarray)):
-                temp = [temp]
+            if not isinstance(experiments, (list, tuple, np.ndarray)):
+                experiments = [experiments]
 
             sim_plot_children = []
-            for p in pres:
-                p_idx = self._get_pressure_index(source=source, pressure=p)
-                for t in temp:
-                    if source == 'PP':
-                        t_idx = self.settings.get('pp_temp', []).index(t)
-                        all_table_sims = self.get_pp_condition_profiles(
-                            tables=pp_tables or [],
-                            p_idx=p_idx,
-                            t_idx=t_idx,
-                        )
-                        for table_name in pp_tables or []:
-                            table_results: dict[str, dict[int, dict[int, NDArray]]] = {}
-                            if table_name in all_table_sims:
-                                table_results[table_name] = (
-                                    all_table_sims[table_name]
+            for exp_id in experiments:
+                if source == 'PP':
+                    exp = self.pp_experiments[exp_id]
+                else:
+                    exp = self.experiments[exp_id]
+                measured = exp.species
+                P_bar = round(Q_(exp.P, 'Pa').to('bar').magnitude, 5)
+                T = exp.T
+
+                if source == 'PP':
+                    p_idx = self._get_pressure_index(
+                        source='PP', pressure=P_bar)
+                    t_idx = self.settings['pp_temp'].index(T)
+                    all_table_sims = self.get_pp_condition_profiles(
+                        tables=pp_tables or [],
+                        p_idx=p_idx,
+                        t_idx=t_idx,
+                    )
+                    for table_name in pp_tables or []:
+                        table_results: dict[
+                            str, dict[int, dict[int, NDArray]]] = {}
+                        if table_name in all_table_sims:
+                            table_results[table_name] = (
+                                all_table_sims[table_name]
+                            )
+                        for sp in measured:
+                            sim_plot_children.extend(
+                                self.make_figure(
+                                    gen_name=table_name,
+                                    TPGenSP=table_results,
+                                    experiment_id=exp_id,
+                                    sp=sp,
+                                    sim_db=self.pp_sim_db,
+                                    show_exp_profile=False,
                                 )
-                            for sp in specs:
-                                sim_plot_children.extend(
-                                    self.make_figure(
-                                        gen_name=table_name,
-                                        TPGenSP=table_results,
-                                        sp=sp,
-                                        pres=p,
-                                        temp=t,
-                                        sim_db=self.pp_sim_db,
-                                        show_exp_profile=False,
-                                    )
+                            )
+                else:
+                    all_gen_sims = self.get_regular_condition_profiles(
+                        selected_gen=selected_gen,
+                        experiment_id=exp_id,
+                    )
+                    for table_results, gen_i in zip(
+                            all_gen_sims, selected_gen):
+                        for sp in measured:
+                            sim_plot_children.extend(
+                                self.make_figure(
+                                    gen_name=f'G{gen_i:04d}',
+                                    TPGenSP=table_results,
+                                    experiment_id=exp_id,
+                                    sp=sp,
+                                    sim_db=self.sim_db,
+                                    show_exp_profile=True,
                                 )
-                    else:
-                        t_idx = self.settings['rc_temp'].index(t)
-                        all_gen_sims = self.get_regular_condition_profiles(
-                            selected_gen=selected_gen,
-                            p_idx=p_idx,
-                            t_idx=t_idx,
-                        )
-                        for table_results, gen_i in zip(
-                                all_gen_sims, selected_gen):
-                            for sp in specs:
-                                sim_plot_children.extend(
-                                    self.make_figure(
-                                        gen_name=f'G{gen_i:04d}',
-                                        TPGenSP=table_results,
-                                        sp=sp,
-                                        pres=p,
-                                        temp=t,
-                                        sim_db=self.sim_db,
-                                        show_exp_profile=True,
-                                    )
-                                )
+                            )
 
             return {'display': 'block'}, sim_plot_children
 
@@ -223,8 +226,8 @@ class SIMSection(Section):
     def get_regular_condition_profiles(
             self,
             selected_gen: list[int],
-            p_idx: int,
-            t_idx: int) -> list[dict[str, dict[int, dict[int, NDArray]]]]:
+            experiment_id: int) -> list[
+                dict[str, dict[int, dict[int, NDArray]]]]:
         all_gen_sims: list[dict[str, dict[int, dict[int, NDArray]]]] = []
         models_per_gen: dict[int, list] = {}
         for gen_i in selected_gen:
@@ -237,20 +240,12 @@ class SIMSection(Section):
                 except Exception:
                     tokens = []
             models_per_gen[gen_i] = tokens
-            exp_indices = [
-                idx for idx, exp in enumerate(self.settings['experiments'])
-                if (
-                    exp.P == self.settings['rc_pres'][p_idx]
-                    and exp.T == self.settings['rc_temp'][t_idx]
-                )
-            ]
             for (mdl_gen, mdl_id) in tokens:
-                for exp_idx in exp_indices:
-                    self.sim_db.prepare_batch_select(
-                        table=f'G{mdl_gen:04d}',
-                        mdl_id=mdl_id,
-                        experiment_id=exp_idx,
-                    )
+                self.sim_db.prepare_batch_select(
+                    table=f'G{mdl_gen:04d}',
+                    mdl_id=mdl_id,
+                    experiment_id=experiment_id,
+                )
 
         all_results = self.sim_db.batch_select()
         for gen_i in selected_gen:
@@ -291,13 +286,17 @@ class SIMSection(Section):
     def make_figure(self,
                     gen_name: str,
                     TPGenSP: dict[str, dict[int, dict[int, NDArray]]],
+                    experiment_id: int,
                     sp: str,
-                    pres: float,
-                    temp: float,
                     sim_db: SIM_DB | None,
                     show_exp_profile: bool):
         if sim_db is None:
             return []
+
+        if show_exp_profile:
+            exp_obj = self.experiments[experiment_id]
+        else:
+            exp_obj = self.pp_experiments[experiment_id]
 
         fig = go.Figure()
         nel = 0
@@ -324,46 +323,33 @@ class SIMSection(Section):
         fig.add_traces(traces)
 
         if show_exp_profile:
-            tidx = self.settings['rc_temp'].index(temp)
-            pidx = self.settings['rc_pres'].index(pres)
-            exp_indices = [
-                idx for idx, exp in enumerate(self.settings['experiments'])
-                if (
-                    exp.P == self.settings['rc_pres'][pidx]
-                    and exp.T == self.settings['rc_temp'][tidx]
-                )
-            ]
-            if len(exp_indices) == 0:
-                exp_indices = [0]
-            eidx = exp_indices[0]
-            exp_p = self.settings['experiments'][eidx].data
+            eidx = experiment_id
             exp_species = self.settings['experiments'][eidx].species
-            if sp not in exp_species:
-                return [fig]
-            exp_sp_idx = exp_species.index(sp) + 1
-            fig.add_trace(
-                go.Scatter(
-                    x=exp_p[0],
-                    y=exp_p[exp_sp_idx],
-                    error_y={
-                        'array': self.settings['experiments'][eidx].error[
-                            exp_sp_idx
-                        ]
-                    },
-                    mode='lines',
-                    name='Exp. profile',
-                    line=dict(color='black'),
+            if sp in exp_species:
+                exp_p = self.settings['experiments'][eidx].data
+                exp_sp_idx = exp_species.index(sp) + 1
+                fig.add_trace(
+                    go.Scatter(
+                        x=exp_p[0],
+                        y=exp_p[exp_sp_idx],
+                        error_y={
+                            'array': self.settings['experiments'][
+                                eidx].error[exp_sp_idx]
+                        },
+                        mode='lines',
+                        name='Exp. profile',
+                        line=dict(color='black'),
+                    )
                 )
-            )
 
         apply_profile_layout(fig)
+        P_bar = round(Q_(exp_obj.P, 'Pa').to('bar').magnitude, 5)
+        exp_label = self._experiment_label(
+            exp_obj, experiment_id, self.settings)
         return [
-            html.H3(children=[
-                f'Concentration profiles of {sp}',
-                f' in generations {gen_name}',
-            ]),
-            html.H4(f'T (K): {temp}'),
-            html.H4(f"P ({self.settings['pres_unit']}): {pres}"),
+            html.H3(f'{sp} — {exp_label} — {gen_name}'),
+            html.H4(f'T (K): {exp_obj.T}'),
+            html.H4(f"P ({self.settings['pres_unit']}): {P_bar}"),
             html.H5(f'Number of models: {nel}'),
             dcc.Graph(figure=fig),
         ]

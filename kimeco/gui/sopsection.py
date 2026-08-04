@@ -340,9 +340,16 @@ class SOPSection(Section):
                        line_width=2,
                        line_color='black')
 
+        # Score columns have no perturbation bounds -> skip brown vlines
+        param: str = col.split(dbs)[1]
+        for ptype in Ptype:
+            if ptype.value in param:
+                break
+        is_score: bool = ptype == Ptype.SCORE
+
         lb: float = min(boundaries)
         ub: float = max(boundaries)
-        if lb != ub:
+        if lb != ub and not is_score:
             hist.add_vline(x=lb,
                            line_width=4,
                            line_color='brown')
