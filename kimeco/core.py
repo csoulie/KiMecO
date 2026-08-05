@@ -68,9 +68,11 @@ class CoreRun:
         # Contain the time when a sim_id was first queried
         self.requeue_timer = {}
 
-        # Thread-safe locks
-        self.mdl_locks: dict[tuple[int, int], LockType] = {
-            (mdl.gen, mdl.id): threading.Lock() for mdl in self.models}
+        # Thread-safe locks. Merged postprocessing ensembles can reuse the
+        # same (gen, id) across different origin tables, so key by table.
+        self.mdl_locks: dict[tuple[str, int], LockType] = {
+            (self.get_table_name(mdl), mdl.id): threading.Lock()
+            for mdl in self.models}
         self.qs_lock = threading.Lock()
         self.requeue_lock = threading.Lock()
         self.file_locks = {}
@@ -79,20 +81,18 @@ class CoreRun:
         base_path: str = f'{self.loc}/{self.base_dir}'
         os.makedirs(base_path, exist_ok=True)
 
-        # Create folders for each model's generation
+        # Create folders for each distinct origin table (mixed prefixes
+        # are possible when postprocessing merges ensembles).
         if self.models:
-            generations_present = set(mdl.gen for mdl in self.models)
+            tables_present: dict[str, list[Model]] = {}
+            for mdl in self.models:
+                tables_present.setdefault(
+                    self.get_table_name(mdl), []).append(mdl)
 
-            for gen in generations_present:
-                if self.prefix.startswith('X'):
-                    gen_name = f'{self.prefix}'
-                else:
-                    gen_name = f'{self.prefix}{gen:04d}'
+            for gen_name, gen_models in tables_present.items():
                 gen_dir = f'{base_path}/{gen_name}'
                 os.makedirs(gen_dir + '/logs', exist_ok=True)
 
-                # Get models in this generation
-                gen_models = [mdl for mdl in self.models if mdl.gen == gen]
                 subfolders_needed = set(
                     mdl.id // 50 for mdl in gen_models
                 )
@@ -126,10 +126,8 @@ class CoreRun:
         Returns:
             Table name (e.g., 'G0000')
         """
-        if self.prefix.startswith('X'):
-            return f'{self.prefix}'
-        else:
-            return f'{self.prefix}{mdl.gen:04d}'
+        prefix = getattr(mdl, 'origin_prefix', None) or self.prefix
+        return f'{prefix}{mdl.gen:04d}'
 
     def get_gen_folder(self, mdl: Model) -> str:
         """Get the generation folder path for an model.
@@ -171,15 +169,11 @@ class CoreRun:
         if not self.models:
             return
 
-        # Get unique generations from models
-        generations: set[int] = set(mdl.gen for mdl in self.models)
+        # Distinct table names (mixed prefixes possible in postprocessing).
+        table_names: set[str] = {
+            self.get_table_name(mdl) for mdl in self.models}
 
-        for gen in generations:
-            if self.prefix.startswith('X'):
-                tbl_name = f'{self.prefix}'
-            else:
-                tbl_name = f'{self.prefix}{gen:04d}'
-
+        for tbl_name in table_names:
             # SOP
             if tbl_name not in self.sop_db.tables:
                 self.sop_db.create_new_table(name=tbl_name)
@@ -213,7 +207,8 @@ class CoreRun:
                         continue
 
                     # Try to acquire lock, skip if busy
-                    if not self.mdl_locks[(mdl.gen, mdl.id)].acquire(
+                    if not self.mdl_locks[
+                            (self.get_table_name(mdl), mdl.id)].acquire(
                             blocking=False):
                         continue
 
@@ -255,7 +250,8 @@ class CoreRun:
             elif mdl.status == ModelStatus.TO_SAVE:
                 self.finalize_model(mdl)
         finally:
-            self.mdl_locks[(mdl.gen, mdl.id)].release()
+            self.mdl_locks[
+                (self.get_table_name(mdl), mdl.id)].release()
 
     def reset_model(self,
                     mdl: Model) -> None:
@@ -297,6 +293,10 @@ class CoreRun:
             klog=self.klog
         )
         mdl.rateCoef.set_status(table=table_name)
+        if self.settings['postprocess'] and not mdl.rateCoef.missing_grid:
+            # Every (P,T) cell already persisted: reuse and skip MESS.
+            mdl.status = ModelStatus.KIN
+            return
         if mdl.rateCoef.status == JobStatus.FINISHED:
             self.klog.debug(
                 f'Rate coefficient calc status for model {mdl.id}:' +
@@ -404,7 +404,8 @@ class CoreRun:
                         self.sim_db.prepare_batch_upsert(
                             table=table_name,
                             mdl_id=mdl.id,
-                            experiment_id=sim,
+                            experiment_id=sim + getattr(
+                                mdl, '_sim_offset', 0),
                             result=blob,
                         )
 
@@ -448,15 +449,18 @@ class CoreRun:
                 if mdl is None:
                     continue  # Model not found
 
-                for sim_idx, db_data in exp_profiles.items():
+                offset: int = getattr(mdl, '_sim_offset', 0)
+                for db_exp_id, db_data in exp_profiles.items():
+                    # Map the banded DB experiment_id back to the local index.
+                    local: int = db_exp_id - offset
                     # number of timesteps
-                    nsteps: int = len(self.get_sim_time_grid(sim_idx))
+                    nsteps: int = len(self.get_sim_time_grid(local))
 
                     # Validate data completeness
                     if len(db_data) != nsteps:
                         continue
 
-                    mdl.sim.profiles[sim_idx] = db_data.T[1:]
+                    mdl.sim.profiles[local] = db_data.T[1:]
 
                 # Scoring needs all the profiles
                 if all([prof is not None for prof in mdl.sim.profiles]):

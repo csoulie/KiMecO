@@ -25,6 +25,16 @@
             "python": "/home/csoulie/.conda/envs/game/bin/python"
         },
         {
+            "name": "kmopp dev",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/csoulie/.conda/envs/game/bin/kmopp",
+            "console": "integratedTerminal",
+            "args": ["input.json"],
+            "cwd": "/home/csoulie/kmo_dev",
+            "python": "/home/csoulie/.conda/envs/game/bin/python"
+        },
+        {
             "name": "kmo dev test",
             "type": "debugpy",
             "request": "launch",

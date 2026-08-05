@@ -2,15 +2,17 @@ import sys
 import os
 import json
 import numpy as np
-from kimeco._kimeco import KiMecO
-from kimeco.database.kin_db import KIN_DB
-from kimeco.database.sim_db import SIM_DB
-import time
+import cantera.with_units as ctu
+from kimeco._kimeco import KiMecO, optimizer_prefix
 from kimeco.model import Model
 from kimeco.enums import ModelStatus
 from kimeco.goat import GOATs
 from kimeco.parameters import SOP
+from kimeco.optimizers.NelderMead.nelder_mead_swarm import NelderMeadSwarm
 from kimeco.postprocessing.extrapolate import Extrapolate
+
+ureg = ctu.cantera_units_registry
+Q_ = ureg.Quantity
 
 
 class PostProcess(KiMecO):
@@ -82,25 +84,6 @@ class PostProcess(KiMecO):
             postprocess=postprocess
         )
 
-    def initialize_databases(self) -> None:
-        super().initialize_databases()
-        start_time: float = time.time()
-        self.pp_db = KIN_DB(sop=self.init_SOP,
-                            name='PP_DB_KIN',
-                            threads=self.settings['threads'],
-                            path=self.settings['workdir'])
-        kin_db_time: float = time.time() - start_time
-        msg = 'Extrapolation_DB initialized:'
-        self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
-        start_time = time.time()
-        self.pp_sim_db = SIM_DB(
-            name='PP_DB_SIM',
-            threads=self.settings['threads'],
-            path=self.settings['workdir'])
-        sim_db_time: float = time.time() - start_time
-        msg = 'Extrapolation_SIM_DB initialized:'
-        self.klog.info(f"{msg:<65}{sim_db_time:>15.1f}")
-
     def load_goats(self) -> None:
         """Load the goat file from the run to create a
         GOATs object for postprocessing.
@@ -114,20 +97,37 @@ class PostProcess(KiMecO):
             sim_db=self.sim_db,
             sf=self.sf,
         )
+        # Tables use the optimizer's prefix (e.g. 'G' for the GA).
+        self.goats.prefix = optimizer_prefix(self.settings)
 
     def set_postprocessing(self) -> None:
         """Set parameters for postprocessing"""
         self.klog.info(f"{'Postprocessing parameters:':<65}")
-        self.klog.info(
-            f"{'Temperatures (K):':<65}{str(self.settings['pp_temp']):>15}")
+        # Per-experiment metadata (replaces the flat T/P grid dump).
         pu: str = f'{self.settings["pres_unit"]}'
-        self.klog.info(
-            f"{f'Pressures ({pu}):':<65}{str(self.settings['pp_pres']):>15}")
-        # Loop over user-requested ensembles
-        ensembles: list[str] = self.settings['pp_ensembles']
+        for idx, exp in enumerate(self.settings['pp_experiments']):
+            try:
+                p_disp: float = Q_(exp.P, 'Pa').to(
+                    self.settings['pres_unit']).magnitude
+            except Exception:
+                p_disp = exp.P
+            comp: str = ', '.join(f'{k}={v}' for k, v in exp.X.items())
+            self.klog.info(
+                f"  pp_exp #{idx} [{exp.exp_type}] "
+                f"T={exp.T:g} K, P={p_disp:g} {pu}, "
+                f"species={exp.species}, X={{{comp}}}"
+            )
 
-        for token in ensembles:
+        n_run: int = self.settings['n_run_exp']
+        n_pp: int = self.settings['n_exp']
+        # Collect models requested by every ensemble token, tag them with
+        # their origin table and simulation band, then replay them together.
+        ensembles: list[str] = self.settings['pp_ensembles']
+        all_models: list[Model] = []
+
+        for band, token in enumerate(ensembles):
             name: str = token
+            models: list[Model] = []
 
             # Precompute token type flags
             cond_g: bool = token.startswith('G') and len(token) == 5 and \
@@ -138,31 +138,27 @@ class PostProcess(KiMecO):
 
             # Generation table: G####
             if cond_g:
-                models: list[Model] = self.get_generation(token)
+                models = self.get_generation(token)
             # GOATs generation: GT####
             elif cond_gt:
                 gen_id = int(token[2:])
-                models: list[Model] = []
                 try:
                     goats_models = self.goats.get_goat_for_gen(gen_id)
                 except Exception as e:
                     self.klog.warning(f"Could not load GOATs for {token}: {e}")
                     continue
-                for idx, mdl in enumerate(goats_models):
-                    models.append(Model(
+                for mdl in goats_models:
+                    new_mdl = Model(
                         sop=mdl.sop,
-                        id=idx,
+                        id=mdl.id,
                         gen=mdl.gen,
                         status=ModelStatus.SOP.value
-                    ))
-                if gen_id >= 0:
-                    name = token
-                else:
-                    name = f"GT{len(self.goats) - 1:04d}"
+                    )
+                    new_mdl.origin_prefix = self.goats.prefix
+                    models.append(new_mdl)
 
             # NMSG Nelder-Mead Swarm Generation: NMSG####
             elif cond_nms:
-                models = []
                 # Find the size of the ensemble
                 nms_cond_g = self.settings['NMS_start'].startswith('G') and \
                     self.settings['NMS_start'][1:].isdigit()
@@ -194,28 +190,25 @@ class PostProcess(KiMecO):
                     except Exception as e:
                         raise ValueError(
                             f"Could not read table {table_name}: {e}")
-                    for idx, row in enumerate(rows):
+                    for row in rows:
                         mdl_id = int(row[0])
                         if mdl_id in els2load:
-                            models.append(
-                                Model(
-                                    sop=SOP.from_db_row(
-                                        sop_tpl=self.init_SOP,
-                                        row=np.asarray(row[1:]).tolist()
-                                    ),
-                                    id=mdl_id,
-                                    gen=gen
-                                )
+                            new_mdl = Model(
+                                sop=SOP.from_db_row(
+                                    sop_tpl=self.init_SOP,
+                                    row=np.asarray(row[1:]).tolist()
+                                ),
+                                id=mdl_id,
+                                gen=gen
                             )
+                            new_mdl.origin_prefix = NelderMeadSwarm.prefix
+                            models.append(new_mdl)
                             els2load.pop(els2load.index(mdl_id))
                     if not els2load:
                         break
             # Nelder-Mead Generation: NM####
             elif cond_nm:
-                models = []
                 gen_id = int(token[2:])
-                # Find the size of the ensemble
-                tot_mdl: int = 1
                 # Find all NM tables in the SOP DB
                 NM_gens: list[int] = [
                     int(tbl_name.split('NM')[-1])
@@ -234,37 +227,53 @@ class PostProcess(KiMecO):
                         f"Table {name} not found in SOP DB for "
                         "postprocessing."
                     )
-                models.append(
-                    Model(
-                        sop=SOP.from_db_row(
-                            sop_tpl=self.init_SOP,
-                            row=self.sop_db.get_table(name)[0][1:]),
-                        id=0,
-                        gen=gen_id
-                    )
+                nm_rows = self.sop_db.get_table(name)
+                new_mdl = Model(
+                    sop=SOP.from_db_row(
+                        sop_tpl=self.init_SOP,
+                        row=nm_rows[0][1:]),
+                    id=int(nm_rows[0][0]),
+                    gen=int(name[2:])
                 )
+                new_mdl.origin_prefix = 'NM'
+                models.append(new_mdl)
             # Unknown token
             else:
                 self.klog.warning(
                     f"Unknown pp_ensemble token '{token}', skipping.")
                 continue
 
-            # Run extrapolation for this ensemble
             if not models:
                 self.klog.warning(f"No models found for {name}, skipping.")
                 continue
-            Extrapolate(
-                models=models,
-                settings=self.settings,
-                rc_tpls=self.input_tpls,
-                sop_db=self.sop_db,
-                kin_db=self.pp_db,
-                sim_db=self.pp_sim_db,
-                sf=self.sf,
-                pert=self.pert,
-                klog=self.klog,
-                prefix=name
-            ).run()
+            for mdl in models:
+                mdl.pp_band = band
+            all_models.extend(models)
+
+        if not all_models:
+            self.klog.warning("No postprocessing models found.")
+            return
+
+        # De-duplicate models shared across ensembles (same sop/gen/id),
+        # keeping the first band, then assign unique threads and the
+        # simulation offset that bands each ensemble's extrapolated profiles.
+        merged: list[Model] = list(dict.fromkeys(all_models))
+        for i, mdl in enumerate(merged):
+            mdl.thread_id = i
+            mdl._sim_offset = n_run + mdl.pp_band * n_pp
+
+        Extrapolate(
+            models=merged,
+            settings=self.settings,
+            rc_tpls=self.input_tpls,
+            sop_db=self.sop_db,
+            kin_db=self.kin_db,
+            sim_db=self.sim_db,
+            sf=self.sf,
+            pert=self.pert,
+            klog=self.klog,
+            prefix='PP'
+        ).run()
 
     def get_generation(self,
                        token: str) -> list[Model]:
@@ -275,19 +284,17 @@ class PostProcess(KiMecO):
         except Exception as e:
             raise ValueError(
                 f"Could not read table {token}: {e}")
-        for idx, row in enumerate(rows):
-            models.append(
-                Model(
-                    sop=SOP.from_db_row(
-                        sop_tpl=self.init_SOP,
-                        row=np.asarray(row[1:]).tolist()
-                    ),
-                    id=idx,
-                    gen=int(token[1:])
-
-
-                )
+        for row in rows:
+            mdl = Model(
+                sop=SOP.from_db_row(
+                    sop_tpl=self.init_SOP,
+                    row=np.asarray(row[1:]).tolist()
+                ),
+                id=int(row[0]),
+                gen=int(token[1:])
             )
+            mdl.origin_prefix = 'G'
+            models.append(mdl)
         return models
 
 

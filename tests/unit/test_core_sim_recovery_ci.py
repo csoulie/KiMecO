@@ -180,3 +180,85 @@ def test_recover_simulation_data_reads_json_and_converts_to_feather(
     # Verify feather blob is stored in database
     expected_blob = _blob_from_dict({'time': [0.0, 1.0], 'A': [1.0, 0.25]})
     assert sim_db._upsert['G0000'][(7, 0)] == expected_blob
+
+
+def test_recover_simulation_data_applies_sim_offset(
+    tmp_path: Path,
+) -> None:
+    """Banded models upsert at experiment_id = sim + _sim_offset."""
+    import json
+
+    sim_db = SIM_DB(name='TEST_CORE_SIM_OFF', path=str(tmp_path), threads=1)
+    experiments = [
+        SimpleNamespace(data=np.array([[0.0, 1.0]], dtype=float)),
+    ]
+    core = _core_stub(
+        tmp_path=tmp_path,
+        sim_db=sim_db,
+        experiments=experiments,
+    )
+    model = SimpleNamespace(
+        id=7,
+        gen=0,
+        name='E0007',
+        sim=DummySim(profiles=[None], status=JobStatus.PICKED_UP),
+        status=ModelStatus.SIM,
+        _sim_offset=5,
+    )
+
+    folder = tmp_path / 'base' / 'G0000' / '00'
+    folder.mkdir(parents=True)
+    json_file = folder / 'G0000E0007S00.json'
+    json_file.write_text(json.dumps({'time': [0.0, 1.0], 'A': [1.0, 0.25]}))
+
+    core.recover_simulation_data(cast(Any, model))
+
+    assert model.status == ModelStatus.SCORING
+    # experiment_id is banded by the offset, not the raw sim index.
+    assert (7, 5) in sim_db._upsert['G0000']
+    assert (7, 0) not in sim_db._upsert.get('G0000', {})
+
+
+def test_collect_sim_profiles_maps_offset_back_to_local(
+    tmp_path: Path,
+) -> None:
+    """Banded DB experiment_ids map back to local indices via the offset."""
+    sim_db = SIM_DB(
+        name='TEST_CORE_SIM_COLLECT_OFF',
+        path=str(tmp_path),
+        threads=1,
+    )
+    experiments = [
+        SimpleNamespace(data=np.array([[0.0, 1.0]], dtype=float)),
+        SimpleNamespace(data=np.array([[0.0, 1.0]], dtype=float)),
+    ]
+    core = _core_stub(
+        tmp_path=tmp_path,
+        sim_db=sim_db,
+        experiments=experiments,
+    )
+    model = SimpleNamespace(
+        id=7,
+        gen=0,
+        sim=SimpleNamespace(profiles=[None, None]),
+        status=ModelStatus.SIM,
+        _sim_offset=10,
+    )
+    core.models = cast(Any, [model])
+
+    sim_db.create_new_table(name='G0000')
+    sim_db.prepare_batch_upsert(
+        table='G0000', mdl_id=7, experiment_id=10,
+        result=_blob_from_dict({'time': [0.0, 1.0], 'A': [1.0, 0.8]}))
+    sim_db.prepare_batch_upsert(
+        table='G0000', mdl_id=7, experiment_id=11,
+        result=_blob_from_dict({'time': [0.0, 1.0], 'A': [0.5, 0.2]}))
+    sim_db.batch_upsert()
+    sim_db.prepare_batch_select(table='G0000', mdl_id=7, experiment_id=10)
+    sim_db.prepare_batch_select(table='G0000', mdl_id=7, experiment_id=11)
+
+    core.collect_sim_profiles()
+
+    assert model.status == ModelStatus.SCORING
+    assert model.sim.profiles[0].tolist() == [[0.0, 1.0], [1.0, 0.8]]
+    assert model.sim.profiles[1].tolist() == [[0.0, 1.0], [0.5, 0.2]]

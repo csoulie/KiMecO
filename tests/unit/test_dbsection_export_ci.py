@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pandas as pd
 import pyarrow as pa
@@ -20,7 +22,6 @@ def _blob_from_dict(data: dict[str, list[float]]) -> bytes:
 def _make_section(tmp_path: Path, db: SIM_DB) -> DBSection:
     section = DBSection.__new__(DBSection)
     section.sim_db = db
-    section.pp_sim_db = None
     section.settings = {'workdir': str(tmp_path)}
     return section
 
@@ -85,3 +86,46 @@ def test_export_results_rejects_non_sim_db(tmp_path: Path) -> None:
         assert 'not a SIM database' in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError('Expected ValueError for non-SIM database')
+
+
+# ---------------------------------------------------------------------------
+# _experiment_label (offset / band decoding)
+# ---------------------------------------------------------------------------
+def _label_section(experiments, pp_experiments, n_run) -> DBSection:
+    section = DBSection.__new__(DBSection)
+    section.sim_db = cast(Any, SimpleNamespace(name='KMO_DB_SIM'))
+    section.settings = {
+        'experiments': experiments,
+        'pp_experiments': pp_experiments,
+        'n_run_exp': n_run,
+        'pres_unit': 'bar',
+    }
+    return section
+
+
+def test_experiment_label_regular_below_n_run() -> None:
+    exp = SimpleNamespace(exp_type='Time profile', P=101325.0, T=300.0)
+    section = _label_section([exp], [], n_run=1)
+
+    assert section._experiment_label('KMO_DB_SIM.db', 0) == 'Time profile #0'
+
+
+def test_experiment_label_extrapolated_band() -> None:
+    exp = SimpleNamespace(exp_type='TP', P=101325.0, T=300.0)
+    pp = SimpleNamespace(exp_type='PP', P=202650.0, T=500.0)
+    section = _label_section([exp], [pp], n_run=1)
+
+    # id = n_run + band*n_pp + local = 1 + 0*1 + 0 -> band 0, local 0.
+    label = section._experiment_label('KMO_DB_SIM.db', 1)
+
+    assert 'Extrapolated (band 0)' in label
+    assert 'PP' in label
+    assert '500 K' in label
+
+
+def test_experiment_label_guard_no_pp_experiments() -> None:
+    exp = SimpleNamespace(exp_type='TP', P=101325.0, T=300.0)
+    section = _label_section([exp], [], n_run=1)
+
+    # n_pp == 0 -> falls back to the generic descriptor.
+    assert section._experiment_label('KMO_DB_SIM.db', 5) == 'Simulation #5'

@@ -23,6 +23,7 @@ class NelderMeadSwarm:
     a different initial model. Performs a single upfront sensitivity analysis
     to determine the parameter dimensions used by all NM instances.
     """
+    prefix: str = 'NMSG'
 
     def __init__(self,
                  models: list[Model],

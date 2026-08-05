@@ -9,7 +9,6 @@ import pytest
 from dash import html
 from dash.exceptions import PreventUpdate
 
-from kimeco.experiments.t_profile import TimeProfile
 from kimeco.gui import simsection as simsection_mod
 from kimeco.gui.simsection import SIMSection
 
@@ -17,31 +16,34 @@ from kimeco.gui.simsection import SIMSection
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _make_time_profile(temp, pres, species, data=None):
-    """Build a minimal real TimeProfile (klog stored, never called)."""
-    arr = np.zeros((len(species) + 1, 1), dtype=float) if data is None \
-        else np.asarray(data, dtype=float)
-    return TimeProfile(
-        temp=temp,
-        pres=pres,
-        composition={sp: 1.0 for sp in species},
-        data_file='data.csv',
-        error_file='error.csv',
-        sim_file='sim.inp',
-        settings={},
-        klog=None,          # type: ignore[arg-type]
+def _exp(exp_type='Time profile', pres=101325.0, temp=300.0, species=('A',)):
+    n = len(species)
+    return SimpleNamespace(
+        exp_type=exp_type,
+        P=pres,
+        T=temp,
         species=list(species),
-        data=arr,
-        error=np.zeros_like(arr),
+        data=np.array([[0.0, 1.0]] + [[0.1, 0.2]] * n),
+        error=np.array([[0.0, 0.0]] + [[0.01, 0.01]] * n),
     )
 
 
-def _bare_section(**attrs) -> SIMSection:
+def _bare_section(experiments=None,
+                  pp_experiments=None,
+                  n_run=None,
+                  pp_ensembles=None,
+                  **attrs) -> SIMSection:
     section = SIMSection.__new__(SIMSection)
-    section.settings = {'pres_unit': 'bar'}
-    section.experiments = []
-    section.pp_experiments = []
-    section.pp_tables = []
+    section.experiments = experiments if experiments is not None else []
+    section.pp_experiments = (
+        pp_experiments if pp_experiments is not None else [])
+    section.n_run = n_run if n_run is not None else len(section.experiments)
+    section.n_pp = len(section.pp_experiments)
+    section.settings = {
+        'pres_unit': 'bar',
+        'n_run_exp': section.n_run,
+        'pp_ensembles': pp_ensembles if pp_ensembles is not None else [],
+    }
     for key, value in attrs.items():
         setattr(section, key, value)
     return section
@@ -63,129 +65,84 @@ def _capture_callbacks(monkeypatch, section: SIMSection) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# _experiment_label
+# _resolve_experiment
 # ---------------------------------------------------------------------------
-def test_experiment_label_time_profile_contains_all_fields() -> None:
-    section = _bare_section()
-    exp = _make_time_profile(temp=300, pres=101325.0, species=['A', 'B'])
+def test_resolve_experiment_regular_below_n_run() -> None:
+    exps = [_exp(species=['A', 'B'])]
+    section = _bare_section(experiments=exps, n_run=1)
 
-    label = section._experiment_label(exp, 2, section.settings)
+    exp_obj, show, label = section._resolve_experiment(0)
 
-    assert exp.exp_type in label
-    assert '#2' in label
+    assert exp_obj is exps[0]
+    assert show is True
+    assert 'Time profile #0' in label
     assert '1.013 bar' in label
     assert '300 K' in label
-    assert 'A' in label and 'B' in label
-    assert label == (
-        f'{exp.exp_type} #2 — 1.013 bar, 300 K — A, B'
-    )
+    assert label.endswith('A, B')
 
 
-def test_experiment_label_time_profile_formatting_edges() -> None:
-    section = _bare_section()
-    exp = _make_time_profile(temp=1000.0, pres=101325.0, species=['ONLY'])
+def test_resolve_experiment_banded_extrapolated() -> None:
+    exps = [_exp()]
+    pp = [_exp(exp_type='PP', temp=500.0, species=['C'])]
+    section = _bare_section(
+        experiments=exps, pp_experiments=pp, n_run=1,
+        pp_ensembles=['G0000'])
 
-    label = section._experiment_label(exp, 0, section.settings)
+    # experiment_id = n_run + band*n_pp + local = 1 + 0*1 + 0.
+    exp_obj, show, label = section._resolve_experiment(1)
 
-    # :g must drop the trailing .0 on an integral temperature.
-    assert '1000 K' in label
-    assert '1000.0 K' not in label
-    # Single species -> exactly that token after the em dash.
-    assert label.endswith('— ONLY')
+    assert exp_obj is pp[0]
+    assert show is False
+    assert 'Extrapolated (band 0)' in label
+    assert 'PP' in label
+    assert '500 K' in label
 
 
-def test_experiment_label_generic_fallback() -> None:
-    section = _bare_section()
-    exp = SimpleNamespace(
-        exp_type='Custom',
-        P=555.0,
-        T=777.0,
-        species=['LEAK'],
-    )
+def test_resolve_experiment_out_of_range_returns_none() -> None:
+    exps = [_exp()]
+    section = _bare_section(experiments=exps, n_run=1, pp_ensembles=[])
 
-    label = section._experiment_label(exp, 4, section.settings)
+    exp_obj, show, label = section._resolve_experiment(5)
 
-    assert label == 'Custom #4'
-    for leaked in ('555', '777', 'LEAK', 'bar', 'K'):
-        assert leaked not in label
+    assert exp_obj is None
+    assert show is False
+    assert label == 'Simulation #5'
 
 
 # ---------------------------------------------------------------------------
 # _experiment_options
 # ---------------------------------------------------------------------------
-def test_experiment_options_regular_uses_experiments() -> None:
-    exps = [
-        SimpleNamespace(exp_type='E', P=1.0, T=1.0, species=['A']),
-        SimpleNamespace(exp_type='E', P=2.0, T=2.0, species=['B']),
-    ]
-    section = _bare_section(experiments=exps)
+def test_experiment_options_lists_regular_and_banded() -> None:
+    exps = [_exp()]
+    pp = [_exp(exp_type='PP', species=['C'])]
+    section = _bare_section(
+        experiments=exps, pp_experiments=pp, n_run=1,
+        pp_ensembles=['G0000', 'G0001'])
 
-    options = section._experiment_options('REG')
+    options = section._experiment_options()
 
-    assert [o['value'] for o in options] == [0, 1]
-    for i, opt in enumerate(options):
-        assert opt['label'] == section._experiment_label(
-            exps[i], i, section.settings)
-
-
-def test_experiment_options_pp_uses_pp_experiments() -> None:
-    reg = [SimpleNamespace(exp_type='R', P=1.0, T=1.0, species=['A'])]
-    pp = [
-        SimpleNamespace(exp_type='P', P=1.0, T=1.0, species=['C']),
-        SimpleNamespace(exp_type='P', P=2.0, T=2.0, species=['D']),
-    ]
-    section = _bare_section(experiments=reg, pp_experiments=pp)
-
-    options = section._experiment_options('PP')
-
-    assert [o['value'] for o in options] == [0, 1]
-    assert options[0]['label'] == section._experiment_label(
-        pp[0], 0, section.settings)
+    # value 0 (regular) + one banded id per (band, local): 1 and 2.
+    assert [o['value'] for o in options] == [0, 1, 2]
+    assert options[0]['label'] == section._resolve_experiment(0)[2]
+    assert options[1]['label'] == section._resolve_experiment(1)[2]
+    assert options[2]['label'] == section._resolve_experiment(2)[2]
 
 
 def test_experiment_options_empty() -> None:
-    section = _bare_section(experiments=[], pp_experiments=[])
-    assert section._experiment_options('REG') == []
-    assert section._experiment_options('PP') == []
+    section = _bare_section(
+        experiments=[], pp_experiments=[], n_run=0, pp_ensembles=[])
 
-
-# ---------------------------------------------------------------------------
-# update_sim_source callback
-# ---------------------------------------------------------------------------
-def test_update_sim_source_regular(monkeypatch) -> None:
-    exps = [SimpleNamespace(exp_type='E', P=1.0, T=1.0, species=['A'])]
-    section = _bare_section(experiments=exps, pp_tables=['G0000'])
-    callbacks = _capture_callbacks(monkeypatch, section)
-
-    options, style, pp_options = callbacks['update_sim_source']('REG')
-
-    assert options == section._experiment_options('REG')
-    assert style == {'display': 'none'}
-    assert pp_options == section.pp_tables
-
-
-def test_update_sim_source_postprocessing(monkeypatch) -> None:
-    pp = [SimpleNamespace(exp_type='P', P=1.0, T=1.0, species=['C'])]
-    section = _bare_section(pp_experiments=pp, pp_tables=['G0000', 'G0001'])
-    callbacks = _capture_callbacks(monkeypatch, section)
-
-    options, style, pp_options = callbacks['update_sim_source']('PP')
-
-    assert options == section._experiment_options('PP')
-    assert style == {'display': 'block'}
-    assert pp_options == section.pp_tables
+    assert section._experiment_options() == []
 
 
 # ---------------------------------------------------------------------------
 # show_sim_plot_button callback
 # ---------------------------------------------------------------------------
-def test_show_sim_plot_button_regular_selected(monkeypatch) -> None:
+def test_show_sim_plot_button_selected(monkeypatch) -> None:
     section = _bare_section()
     callbacks = _capture_callbacks(monkeypatch, section)
 
-    assert callbacks['show_sim_plot_button']('REG', [0], None) == {
-        'display': 'block'
-    }
+    assert callbacks['show_sim_plot_button']([0]) == {'display': 'block'}
 
 
 @pytest.mark.parametrize('experiments', [None, []])
@@ -194,32 +151,16 @@ def test_show_sim_plot_button_empty_prevents(monkeypatch, experiments) -> None:
     callbacks = _capture_callbacks(monkeypatch, section)
 
     with pytest.raises(PreventUpdate):
-        callbacks['show_sim_plot_button']('REG', experiments, None)
-
-
-def test_show_sim_plot_button_pp_requires_tables(monkeypatch) -> None:
-    section = _bare_section()
-    callbacks = _capture_callbacks(monkeypatch, section)
-    show = callbacks['show_sim_plot_button']
-
-    with pytest.raises(PreventUpdate):
-        show('PP', [0], None)
-
-    assert show('PP', [0], ['G0000']) == {'display': 'block'}
+        callbacks['show_sim_plot_button'](experiments)
 
 
 # ---------------------------------------------------------------------------
 # update_sim_figure callback
 # ---------------------------------------------------------------------------
-def test_update_sim_figure_regular_one_call_per_exp_species(
-    monkeypatch,
-) -> None:
-    exps = [
-        SimpleNamespace(exp_type='E', P=101325.0, T=300.0, species=['A']),
-        SimpleNamespace(exp_type='E', P=101325.0, T=300.0, species=['B']),
-    ]
-    section = _bare_section(experiments=exps)
-    section.sim_db = cast(Any, SimpleNamespace(sv_species=['A', 'B']))
+def test_update_sim_figure_regular_one_call_per_species(monkeypatch) -> None:
+    exps = [_exp(species=['A'])]
+    section = _bare_section(experiments=exps, n_run=1)
+    section.sim_db = cast(Any, SimpleNamespace(sv_species=['A']))
 
     reg_calls: list[dict] = []
     fig_calls: list[dict] = []
@@ -229,65 +170,56 @@ def test_update_sim_figure_regular_one_call_per_exp_species(
             {'selected_gen': selected_gen, 'experiment_id': experiment_id})
         return [{'G0000': {}}]
 
-    def _fake_make_figure(**kwargs):
-        fig_calls.append(kwargs)
-        return []
-
     monkeypatch.setattr(
         section, 'get_regular_condition_profiles', _fake_regular)
-    monkeypatch.setattr(section, 'make_figure', _fake_make_figure)
-
-    callbacks = _capture_callbacks(monkeypatch, section)
-    style, _children = callbacks['update_sim_figure'](
-        1, 'REG', [0, 1], None, [0])
-
-    assert style == {'display': 'block'}
-    # One make_figure per (experiment, measured species).
-    assert len(fig_calls) == 2
-    assert {(c['experiment_id'], c['sp']) for c in fig_calls} == {
-        (0, 'A'), (1, 'B')}
-    # experiment_id threaded through to the DB query.
-    assert {c['experiment_id'] for c in reg_calls} == {0, 1}
-
-
-def test_update_sim_figure_pp_pressure_and_temp_index(monkeypatch) -> None:
-    pp = [SimpleNamespace(exp_type='P', P=101325.0, T=300.0, species=['A'])]
-    section = _bare_section(pp_experiments=pp, pp_tables=['G0000'])
-    section.pp_sim_db = cast(Any, SimpleNamespace(sv_species=['A']))
-    section.settings.update({'pp_pres': [1.01325], 'pp_temp': [300.0]})
-
-    pp_calls: list[dict] = []
-    fig_calls: list[dict] = []
-
-    def _fake_pp(tables, p_idx, t_idx):
-        pp_calls.append(
-            {'tables': tables, 'p_idx': p_idx, 't_idx': t_idx})
-        return {'G0000': {}}
-
-    monkeypatch.setattr(section, 'get_pp_condition_profiles', _fake_pp)
     monkeypatch.setattr(
         section, 'make_figure', lambda **kw: fig_calls.append(kw) or [])
 
     callbacks = _capture_callbacks(monkeypatch, section)
-    callbacks['update_sim_figure'](1, 'PP', [0], ['G0000'], None)
+    style, _children = callbacks['update_sim_figure'](1, [0], [0])
 
-    assert len(pp_calls) == 1
-    # p_idx from settings['pp_pres'].index(P_bar); t_idx from pp_temp.index(T).
-    assert pp_calls[0]['p_idx'] == 0
-    assert pp_calls[0]['t_idx'] == 0
+    assert style == {'display': 'block'}
     assert len(fig_calls) == 1
     assert fig_calls[0]['experiment_id'] == 0
+    assert fig_calls[0]['sp'] == 'A'
+    assert reg_calls == [{'selected_gen': [0], 'experiment_id': 0}]
 
 
-def test_update_sim_figure_empty_selection_prevents(monkeypatch) -> None:
-    section = _bare_section(experiments=[])
+def test_update_sim_figure_banded_routes_experiment_id(monkeypatch) -> None:
+    exps = [_exp(species=['A'])]
+    pp = [_exp(exp_type='PP', species=['C'])]
+    section = _bare_section(
+        experiments=exps, pp_experiments=pp, n_run=1,
+        pp_ensembles=['G0000'])
+    section.sim_db = cast(Any, SimpleNamespace(sv_species=['C']))
+
+    fig_calls: list[dict] = []
+    monkeypatch.setattr(
+        section, 'get_regular_condition_profiles',
+        lambda selected_gen, experiment_id: [{'G0000': {}}])
+    monkeypatch.setattr(
+        section, 'make_figure', lambda **kw: fig_calls.append(kw) or [])
+
+    callbacks = _capture_callbacks(monkeypatch, section)
+    callbacks['update_sim_figure'](1, [1], [0])
+
+    # The banded id resolves to the PP experiment's measured species.
+    assert len(fig_calls) == 1
+    assert fig_calls[0]['experiment_id'] == 1
+    assert fig_calls[0]['sp'] == 'C'
+
+
+@pytest.mark.parametrize(
+    'clic,experiments', [(1, []), (None, [0])])
+def test_update_sim_figure_prevents(monkeypatch, clic, experiments) -> None:
+    section = _bare_section(experiments=[_exp()], n_run=1)
     fig_calls: list[dict] = []
     monkeypatch.setattr(
         section, 'make_figure', lambda **kw: fig_calls.append(kw) or [])
 
     callbacks = _capture_callbacks(monkeypatch, section)
     with pytest.raises(PreventUpdate):
-        callbacks['update_sim_figure'](1, 'REG', [], None, [0])
+        callbacks['update_sim_figure'](clic, experiments, [0])
 
     assert fig_calls == []
 
@@ -296,38 +228,36 @@ def test_update_sim_figure_empty_selection_prevents(monkeypatch) -> None:
 # make_figure heading
 # ---------------------------------------------------------------------------
 def test_make_figure_heading_contains_species_and_experiment() -> None:
-    exp = _make_time_profile(temp=300, pres=101325.0, species=['A'])
-    section = _bare_section(pp_experiments=[exp])
-    sim_db = cast(Any, SimpleNamespace(sv_species=['A']))
+    exps = [_exp(species=['A'])]
+    section = _bare_section(experiments=exps, n_run=1)
+    section.sim_db = cast(Any, SimpleNamespace(sv_species=['A']))
 
     rendered = section.make_figure(
-        gen_name='G0000',
-        TPGenSP={},
-        experiment_id=0,
-        sp='A',
-        sim_db=sim_db,
-        show_exp_profile=False,
-    )
+        gen_name='G0000', TPGenSP={}, experiment_id=0, sp='A')
 
     heading = rendered[0]
     assert isinstance(heading, html.H3)
-    exp_label = section._experiment_label(exp, 0, section.settings)
+    exp_label = section._resolve_experiment(0)[2]
     assert heading.children == f'A — {exp_label} — G0000'
 
 
 def test_make_figure_species_absent_returns_bare_figure() -> None:
-    exp = _make_time_profile(temp=300, pres=101325.0, species=['B'])
-    section = _bare_section(pp_experiments=[exp])
-    sim_db = cast(Any, SimpleNamespace(sv_species=['B']))
+    exps = [_exp(species=['A'])]
+    section = _bare_section(experiments=exps, n_run=1)
+    section.sim_db = cast(Any, SimpleNamespace(sv_species=['B']))
 
     rendered = section.make_figure(
-        gen_name='G0000',
-        TPGenSP={},
-        experiment_id=0,
-        sp='A',
-        sim_db=sim_db,
-        show_exp_profile=False,
-    )
+        gen_name='G0000', TPGenSP={}, experiment_id=0, sp='A')
 
     assert len(rendered) == 1
     assert isinstance(rendered[0], go.Figure)
+
+
+def test_make_figure_unresolved_experiment_returns_empty() -> None:
+    section = _bare_section(experiments=[], n_run=0, pp_ensembles=[])
+    section.sim_db = cast(Any, SimpleNamespace(sv_species=['A']))
+
+    rendered = section.make_figure(
+        gen_name='G0000', TPGenSP={}, experiment_id=9, sp='A')
+
+    assert rendered == []

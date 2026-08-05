@@ -178,7 +178,7 @@ class GOATs:
             row = row_maps.get(table, {}).get(mdl_id)
             if row is None:
                 msg = "Expected exactly one row for id "
-                msg += f"{mdl_id} in table G{gen_id:04d}, found 0"
+                msg += f"{mdl_id} in table {self.prefix}{gen_id:04d}, found 0"
                 raise ValueError(msg)
             sop_obj = self.sop_db.sop_tpl.__class__.from_db_row(
                 sop_tpl=self.sop_db.sop_tpl,

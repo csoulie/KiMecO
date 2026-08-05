@@ -61,6 +61,14 @@ class SOP:
             table_repr += f"'{v}',"
         return table_repr[:-1] + ")>"
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, SOP):
+            return NotImplemented
+        return self.parameters_names == other.parameters_names
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self.parameters_names.items()))
+
     @property
     def species(self) -> list[str]:
         species: list[str] = []

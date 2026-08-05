@@ -25,9 +25,12 @@ class DummyDB:
     def get_ids_from_kin_id(self, table: str, kin_id: int):
         return []
 
+    def get_rates_for_kin_id(self, table: str, kin_id: int, pes_id=None):
+        return []
+
 
 class DummyDBMissingTable:
-    def get_ids_from_kin_id(self, table: str, kin_id: int):
+    def get_rates_for_kin_id(self, table: str, kin_id: int, pes_id=None):
         raise KeyError(table)
 
 

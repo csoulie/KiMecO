@@ -7,11 +7,31 @@ class MessWriter:
     """
     def __init__(self,
                  SOP: SOP,
-                 tpl) -> None:
+                 tpl,
+                 pres: list[float] | None = None,
+                 temp: list[float] | None = None) -> None:
         self.SOP = SOP
         self.tpl = tpl
+        # Optional sub-grid overriding only the rate-coefficient
+        # temperature/pressure placeholders (postprocessing).
+        self._pres_override = pres
+        self._temp_override = temp
+
+    @staticmethod
+    def _fmt_grid(values: list[float]) -> str:
+        out = ""
+        for v in values:
+            out += f" {v: 8.2f}"
+        out += '\n'
+        return out
 
     def _resolve_placeholder(self, placeholder: str):
+        if (placeholder == 'SOP.r_rc_temp'
+                and self._temp_override is not None):
+            return self._fmt_grid(self._temp_override)
+        if (placeholder == 'SOP.r_rc_pres'
+                and self._pres_override is not None):
+            return self._fmt_grid(self._pres_override)
         if '.' not in placeholder:
             raise ValueError(f'Unsupported placeholder: {placeholder}')
 

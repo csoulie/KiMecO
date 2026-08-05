@@ -17,11 +17,22 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
 from kimeco.model import Model
 from kimeco.enums import Optimizers, RestartType
+from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 from kimeco.optimizers.NelderMead.nelder_mead_swarm import NelderMeadSwarm
 from kimeco.writers.mess import MessWriter
+
+
+def optimizer_prefix(settings) -> str:
+    """Resolve the DB table prefix for the configured optimizer."""
+    opt = settings['optimizer']
+    if opt == Optimizers.GA:
+        return GeneticAlgorithm.prefix
+    if opt == Optimizers.NM:
+        return NelderMead.prefix
+    raise NotImplementedError(f'No prefix for optimizer {opt}')
 
 
 class KiMecO:

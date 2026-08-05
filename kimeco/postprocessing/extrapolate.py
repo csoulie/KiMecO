@@ -39,10 +39,21 @@ class Extrapolate(CoreRun):
                  klog=klog,
                  previous_el=previous_el,
                  base_dir='',
-                 prefix='X' + prefix)
+                 prefix=prefix)
         # Overwrite pressure and temperature grids for postprocessing
         self.pres: list[float] = settings["pp_pres"]
         self.temp: list[float] = settings["pp_temp"]
+
+    def reset_model(self,
+                    mdl: Model) -> None:
+        """Retry a failed postprocessing model in place.
+
+        Extrapolation replays fixed SOPs (nothing to perturb) and merged
+        ensembles use non-contiguous ids, so avoid indexing ``self.models``
+        or ``self.previous_el`` by id as the base class does.
+        """
+        mdl.reset += 1
+        mdl.status = ModelStatus.SOP
 
     def run_simulation(self,
                        mdl: Model) -> None:

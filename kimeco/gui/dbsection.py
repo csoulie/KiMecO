@@ -76,7 +76,7 @@ class DBSection(Section):
     # ------------------------------------------------------------------
     def _sim_dbs(self) -> list[SIM_DB]:
         """Return the live ``SIM_DB`` objects known to the app."""
-        return [db for db in (self.sim_db, self.pp_sim_db) if db is not None]
+        return [db for db in (self.sim_db,) if db is not None]
 
     def _sim_db_for_file(self, db_file: str) -> SIM_DB | None:
         """Return the ``SIM_DB`` object backing ``db_file`` if any.
@@ -101,6 +101,17 @@ class DBSection(Section):
                 experiments):
             return f'{experiments[experiment_id].exp_type} ' \
                    f'#{experiment_id}'
+        if self._is_regular_sim(db_file):
+            n_run: int = self.settings['n_run_exp']
+            n_pp: int = len(self.settings.get('pp_experiments', []))
+            if n_pp > 0 and experiment_id >= n_run:
+                band, local = divmod(experiment_id - n_run, n_pp)
+                if 0 <= local < n_pp:
+                    exp = self.settings['pp_experiments'][local]
+                    P_bar: float = exp.P / 1e5
+                    unit: str = self.settings['pres_unit']
+                    return (f'Extrapolated (band {band}) — {exp.exp_type} '
+                            f'{P_bar:.4g} {unit}, {exp.T:g} K')
         return f'Simulation #{experiment_id}'
 
     def sim_descriptor_frame(self,

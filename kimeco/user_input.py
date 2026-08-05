@@ -640,6 +640,9 @@ class KMOInput:
             self.init_loc+self.json_file['project_name']
         self.json_file['input_file'] = self.input_file
         self.json_file['n_exp'] = self.n_exp
+        # Original (fitting) experiment count, recorded before any
+        # postprocessing override of n_exp. Used to band pp simulations.
+        self.json_file['n_run_exp'] = self.n_exp
         self.json_file.setdefault('postprocess', False)
 
         return self.json_file

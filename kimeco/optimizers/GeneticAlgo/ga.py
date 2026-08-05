@@ -28,6 +28,8 @@ class GeneticAlgorithm(ABC):
     Args:
         ABC (metaclass): Make the Scoring class abstract.
     """
+    prefix: str = 'G'
+
     def __init__(self,
                  settings: dict[str, Any],
                  sf: Scoring,

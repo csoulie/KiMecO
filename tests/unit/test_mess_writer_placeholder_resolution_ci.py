@@ -36,6 +36,16 @@ class _DummySOP:
         self.parameters_names: dict[str, str] = {}
 
 
+class _GridSOP:
+    """SOP exposing the default rate-grid placeholders."""
+
+    def __init__(self) -> None:
+        self.items: dict[str, Any] = {}
+        self.parameters_names: dict[str, str] = {}
+        self.r_rc_temp = "DEFAULT_TEMP"
+        self.r_rc_pres = "DEFAULT_PRES"
+
+
 def test_resolve_plain_placeholder() -> None:
     writer = MessWriter(SOP=cast(Any, _DummySOP()), tpl=[])
 
@@ -72,3 +82,32 @@ def test_resolve_out_of_bounds_index_raises_value_error() -> None:
 
     with pytest.raises(ValueError, match="Cannot index token"):
         writer._resolve_placeholder("WELL.m_rotors[1].symFact")
+
+
+# ---------------------------------------------------------------------------
+# Optional pres/temp override (postprocessing sub-grid)
+# ---------------------------------------------------------------------------
+def test_pres_temp_override_limits_grid() -> None:
+    writer = MessWriter(
+        SOP=cast(Any, _GridSOP()), tpl=[], pres=[1.0, 2.0], temp=[300.0])
+
+    # Overrides short-circuit the SOP lookup and format the sub-grid.
+    assert writer._resolve_placeholder("SOP.r_rc_pres") == (
+        "     1.00     2.00\n")
+    assert writer._resolve_placeholder("SOP.r_rc_temp") == "   300.00\n"
+
+
+def test_missing_override_falls_back_to_sop_grid() -> None:
+    writer = MessWriter(SOP=cast(Any, _GridSOP()), tpl=[])
+
+    # No override -> existing SOP.r_rc_* attributes are used.
+    assert writer._resolve_placeholder("SOP.r_rc_pres") == "DEFAULT_PRES"
+    assert writer._resolve_placeholder("SOP.r_rc_temp") == "DEFAULT_TEMP"
+
+
+def test_partial_override_only_affects_its_own_placeholder() -> None:
+    # Only pres is overridden; temp still resolves from the SOP attribute.
+    writer = MessWriter(SOP=cast(Any, _GridSOP()), tpl=[], pres=[5.0])
+
+    assert writer._resolve_placeholder("SOP.r_rc_pres") == "     5.00\n"
+    assert writer._resolve_placeholder("SOP.r_rc_temp") == "DEFAULT_TEMP"

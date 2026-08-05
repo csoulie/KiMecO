@@ -17,6 +17,8 @@ from kimeco.logger_config import KMOLogger
 
 
 class NelderMead:
+    prefix: str = 'NM'
+
     def __init__(self,
                  settings: dict[str, Any],
                  sf: Scoring,

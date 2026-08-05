@@ -19,7 +19,9 @@ This reads the same JSON input file (with `pp_*` keywords added) and the existin
 | pp_experiments | `[]` | **List of dicts** — postprocessing conditions to simulate. Same schema as `experiments` but without `data_file`/`error_file`; each entry adds its own `times` and `species`. See below. |
 | pp_ensembles | `["G0001", "GT-1"]` | **List of strings** — tags of ensembles to process (see token syntax below). |
 
-> The MESS extrapolation grid (`pp_temp` / `pp_pres`) is derived automatically from the unique temperatures and pressures of `pp_experiments`; it is not specified directly.
+> The MESS extrapolation grid is derived automatically from the unique temperatures and pressures of `pp_experiments`; it is not specified directly. Rate coefficients already present in a model's existing KIN table are reused, so only the missing (P, T) conditions are computed.
+
+> When postprocessing starts, the log prints the metadata of each `pp_experiment` (type, temperature, pressure, species, composition).
 
 ## Specifying postprocessing experiments (`pp_experiments`)
 
@@ -92,28 +94,28 @@ Each token specifies which models to extrapolate:
 
 ## Output and results
 
-Postprocessing generates two new SQLite databases in the workdir:
+Postprocessing does **not** create separate databases. Extrapolated results are written back into the **primary run databases** (`KMO_DB_KIN.db` and `KMO_DB_SIM.db`), into the **same per-generation tables** where the models were originally created:
 
-1. **`PP_DB_KIN.db`** — Rate coefficients at the PP condition grid.
-   - Tables named `X<token>` (e.g., `XG0001`, `XGT0005`, `XNM0001`).
-   - Stores k(T, P) for each reaction pair, computed via MESS at your PP P/T grid.
+1. **Rate coefficients** — written into `KMO_DB_KIN.db`, in the table named after the originating optimizer prefix and generation (`{prefix}{gen:04d}`, e.g. `G0003`, `NM0002`, `NMSG0001`).
+   - Already-computed k(T, P) are **reused**: MESS is only re-run for the (P, T) conditions in `pp_experiments` that are not already present in the model's KIN table; missing conditions are computed and appended.
+   - The `GT` token (GOATs ensemble) resolves to the originating optimizer's prefix (e.g. `G` for the genetic algorithm), so `GT` and the old `X` prefix never appear as table names.
 
-2. **`PP_DB_SIM.db`** — Species-time profiles from Cantera simulations.
-   - Tables named `X<token>` with rows indexed by (`mdl_id`, `condition_id`).
-   - Columns: `time` (float), and one binary blob per requested species (Feather-encoded).
-   - Useful for plotting concentration–time trajectories and validating extrapolation trends.
+2. **Simulation profiles** — appended into the existing `KMO_DB_SIM.db` tables for the same generation.
+   - The postprocessing simulation is **always** run and saved because the initial composition differs from the original run.
+   - Profiles are stored with **banded experiment ids** (offset past the original run's experiments), so the original run's simulation results are never overwritten.
 
-**Where files are saved**: All results are written to `workdir/`, organized in subdirectories by ensemble token (e.g., `workdir/XG0001/`, `workdir/XGT0005/`). Intermediate job scripts (SLURM or local) and scratch files are created there.
+> **Forward-only change**: earlier versions wrote separate `PP_DB_KIN.db` / `PP_DB_SIM.db` files with `X`-prefixed tables. Those files are no longer created, and old `X`-prefixed tables from prior runs are not migrated.
+
+**Where files are saved**: All results are written to the run's `KMO_Project/` (or your configured `project_name`) directory, alongside the original databases. Intermediate job scripts (SLURM or local) and scratch files are created there.
 
 ## Workflow overview
 
 1. **Validate pp settings** — check that all P/T/composition/time combinations are consistent.
 2. **Open existing run databases** — SOP_DB, KIN_DB, SIM_DB from the original run.
-3. **Create PP databases** — initialize PP_DB_KIN and PP_DB_SIM in workdir.
-4. **Load GOAT file** — read `workdir/goats.txt` to reconstruct elite ensembles.
-5. **Loop over `pp_ensembles`**:
+3. **Load GOAT file** — read `workdir/goats.txt` to reconstruct elite ensembles.
+4. **Loop over `pp_ensembles`**:
+   - Resolve the token to its originating optimizer prefix and generation table.
    - Load models (SOP parameters) from the SOP_DB table matching the token.
-   - Submit **rate-coefficient jobs** (MESS) to compute k(T, P) at the PP grid.
-   - Submit **Cantera simulation jobs** to run reactor dynamics.
-   - Store profiles in PP_DB_SIM.
-6. **Finalize** — no re-scoring; results are persisted as-is.
+   - Submit **rate-coefficient jobs** (MESS) only for (P, T) conditions missing from the model's KIN table, then append them into that table.
+   - Submit **Cantera simulation jobs** to run reactor dynamics and append the profiles (with banded experiment ids) into the SIM table.
+5. **Finalize** — no re-scoring; results are persisted as-is.

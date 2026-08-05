@@ -12,6 +12,11 @@ import numpy as np
 from kimeco.logger_config import KMOLogger
 
 
+# Reserved row-id band for additive postprocessing writes so partial
+# (per-(P,T)) rate rows never collide with the original run's rows.
+PP_KIN_ROWID_BASE = 10 ** 12
+
+
 class RateCo:
     """Wrapper around different calculators
     for kinetic constants calculation.
@@ -66,35 +71,52 @@ class RateCo:
         self.q_idx: int = q_idx
         self.tbl_map_by_pes: dict[int, dict[str, int]] = {}
         self.rc_by_pes: dict[int, np.ndarray] = {}
+        # (P,T) cells not yet persisted for this object (postprocessing).
+        self.missing_grid: list[tuple[float, float]] = []
 
     def set_status(self,
                    table: str) -> None:
         status: JobStatus = self.q_sys.status(id=self.q_idx,
                                               jtype='kin')
+        # Always evaluate is_in_db so self.missing_grid is populated even
+        # before the output files exist (needed for per-(P,T) skipping).
+        full_grid_present: bool = self.is_in_db(table=table)
         if (status == JobStatus.NOT_IN_QUEUE
            and all(os.path.isfile(output_name)
                    for output_name in self.output_names)
-           and self.is_in_db(table=table)):
+           and full_grid_present):
             self.status = JobStatus.FINISHED
         else:
             self.status = status
 
     def is_in_db(self,
                  table: str) -> bool:
-        """Check if the rate coefficients of this object are in the db.
-
+        """Check if the rate coefficients of this object are in the db and
+        record the still-missing (P,T) cells in ``self.missing_grid``.
 
         Args:
             table (str): Generation's name
 
         Returns:
-            bool: Wether data in db correspond to this object.
+            bool: True when every (P,T) cell is present (normal-run parity).
         """
-        db_row_ids: list[int] = self.db.get_ids_from_kin_id(table=table,
-                                                            kin_id=self.id)
+        rows = self.db.get_rates_for_kin_id(table=table,
+                                            kin_id=self.id)
         n_pairs: int = len(list(self.sop.reaction_iterator()))
-        expected_rows: int = len(self.pres) * len(self.temp) * n_pairs
-        return len(db_row_ids) == expected_rows
+        counts: dict[tuple[float, float], int] = {}
+        for p, t, *_ in rows:
+            key = (round(p, 5), round(t, 5))
+            counts[key] = counts.get(key, 0) + 1
+        present: set[tuple[float, float]] = {
+            key for key, c in counts.items() if c >= n_pairs
+        }
+        self.missing_grid = [
+            (p, t)
+            for p in self.pres
+            for t in self.temp
+            if (round(p, 5), round(t, 5)) not in present
+        ]
+        return len(self.missing_grid) == 0
 
     def q_up(self) -> None:
         """Generate and submit a Kinetic
@@ -122,8 +144,14 @@ class RateCo:
             NotImplementedError: Writter for this software doesn't exist yet
         """
         if self.software == 'mess':
+            sub_p: list[float] | None = None
+            sub_t: list[float] | None = None
+            if self.settings['postprocess'] and self.missing_grid:
+                sub_p = sorted({p for p, _ in self.missing_grid})
+                sub_t = sorted({t for _, t in self.missing_grid})
             for output_slot, software_tpl in enumerate(self.software_tpls):
-                mw = MessWriter(SOP=self.sop, tpl=software_tpl)
+                mw = MessWriter(SOP=self.sop, tpl=software_tpl,
+                                pres=sub_p, temp=sub_t)
                 mw.write(loc=self.loc,
                          filename=f'{self.name}P{output_slot:02d}.inp')
         else:
@@ -198,12 +226,30 @@ class RateCo:
         all_pairs: list[tuple[int, str, str]] = list(
             self.sop.reaction_iterator()
         )
-        row_id = int(
-            self.id * len(self.pres) * len(self.temp) * len(all_pairs)
-        )
+        n_p: int = len(self.pres)
+        n_t: int = len(self.temp)
+        n_pairs: int = len(all_pairs)
+        # In postprocessing, only the missing (P,T) cells are recomputed and
+        # appended; present cells stay untouched. A reserved row-id band keeps
+        # these additive rows from clobbering the original run's rows.
+        partial: bool = bool(
+            self.settings['postprocess'] and self.missing_grid)
+        if partial:
+            missing: set[tuple[float, float]] = {
+                (round(p, 5), round(t, 5)) for p, t in self.missing_grid
+            }
+            base_id: int = PP_KIN_ROWID_BASE + int(
+                self.id * n_p * n_t * n_pairs)
+        else:
+            missing = set()
+            base_id = int(self.id * n_p * n_t * n_pairs)
         for pidx, p in enumerate(self.pres):
             for tidx, t in enumerate(self.temp):
-                for pes_id, from_name, to_name in all_pairs:
+                if partial and (round(p, 5), round(t, 5)) not in missing:
+                    continue
+                cell_base: int = base_id + (pidx * n_t + tidx) * n_pairs
+                for pair_idx, (pes_id, from_name, to_name) in enumerate(
+                        all_pairs):
                     k_value: float = 0.0
                     if pes_id in outputs:
                         mor = outputs[pes_id]
@@ -216,7 +262,7 @@ class RateCo:
                                 mor.rc[pidx, tidx, from_idx, to_idx]
                             )
                     rows.append(
-                        (row_id,
+                        (cell_base + pair_idx,
                          p,
                          t,
                          self.id,
@@ -225,7 +271,6 @@ class RateCo:
                          to_name,
                          k_value)
                     )
-                    row_id += 1
         return rows
 
     def load_rates_from_db(self,

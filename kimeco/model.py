@@ -48,6 +48,10 @@ class Model:
         self.theory_score: float = float('inf')
         self.experiment_score: float = float('inf')
         self.score: float = float('inf')
+        # Postprocessing bookkeeping (defaults keep normal runs unchanged).
+        self.origin_prefix: str | None = None
+        self.pp_band: int = 0
+        self._sim_offset: int = 0
 
     def __getitem__(self, key):
         return self.sop.parameters_names[key]
@@ -55,6 +59,17 @@ class Model:
     def __iter__(self):
         # Returns the iterator for the dictionary's keys
         return iter(self.sop.parameters_names)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Model):
+            return NotImplemented
+        return (self.sop == other.sop and
+                self.status == other.status and
+                self.gen == other.gen and
+                self.id == other.id)
+
+    def __hash__(self) -> int:
+        return hash((self.sop, self.gen, self.id))
 
     def save_kin(self,
                  db: KIN_DB,
@@ -89,12 +104,13 @@ class Model:
                              sim_db: SIM_DB,
                              table) -> None:
         n_exp: int = len(self.sim.profiles)
+        offset: int = getattr(self, '_sim_offset', 0)
         for exp_id in range(n_exp):
             if self.sim.profiles[exp_id] is None:
                 sim_db.prepare_batch_select(
                     table=table,
                     mdl_id=self.id,
-                    experiment_id=exp_id)
+                    experiment_id=exp_id + offset)
 
     @property
     def experiment_scores(self) -> list[float]:
@@ -144,6 +160,6 @@ class Model:
         db.prepare_batch_upsert(
             table=table,
             mdl_id=self.id,
-            experiment_id=sim_num,
+            experiment_id=sim_num + getattr(self, '_sim_offset', 0),
             result=buf.getvalue(),
         )
