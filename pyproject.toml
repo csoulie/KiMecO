@@ -43,6 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=9.0.2"]
+agentic = ["anthropic>=0.69", "pydantic>=2", "pyyaml"]
 
 [project.scripts]
 kmo = "kimeco.main:main"
