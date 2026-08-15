@@ -20,6 +20,7 @@ class _FakeRateCo:
         self.missing_grid = list(_FakeRateCo.next_missing_grid)
         self.status = _FakeRateCo.next_status
         self.q_up_called = False
+        self.recover_called = False
         _FakeRateCo.last = self
 
     def set_status(self, table: str) -> None:
@@ -29,6 +30,10 @@ class _FakeRateCo:
 
     def q_up(self) -> None:
         self.q_up_called = True
+
+    def recover_rslts(self) -> None:
+        # Reuse branch recovers persisted results instead of running MESS.
+        self.recover_called = True
 
 
 def _core(postprocess: bool) -> CoreRun:
@@ -64,6 +69,7 @@ def test_pp_full_reuse_sets_kin_and_skips_mess(monkeypatch) -> None:
 
     # Full grid already persisted -> reuse and skip the MESS submission.
     assert mdl.status == ModelStatus.KIN
+    assert _FakeRateCo.last.recover_called is True
     assert _FakeRateCo.last.q_up_called is False
 
 
