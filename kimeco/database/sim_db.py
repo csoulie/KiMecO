@@ -329,3 +329,35 @@ class SIM_DB(Kimeco_db):
                 results[table][key[0]][key[1]] = decoded
 
         return results
+
+    def get_exp_for_table(
+            self,
+            exp_id: int,
+            table: str
+        ):
+        """Return the results of the chosen experiment for all the models
+        of the designated table.
+        """
+        if table not in self.tables:
+            if not self.table_exists(table):
+                return []
+            self.load_table(table)
+
+        query = select(
+            self.tables[table].c.mdl_id,
+            self.tables[table].c.result,
+        ).where(self.tables[table].c.experiment_id == exp_id)
+        with self.eng.begin() as conn:
+            db_rows = conn.execute(query).fetchall()
+
+        results: list[tuple[NDArray, list[str]]] = []
+        for row in db_rows:
+            decoded, species = self.decode_result_blob(
+                result=row.result,
+                mdl_id=int(row.mdl_id),
+            )
+            if len(self.sv_species) == 0 and len(species) != 0:
+                self.sv_species = species
+            results.append(
+                (decoded.T, species))
+        return results

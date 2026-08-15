@@ -436,3 +436,39 @@ class GOATs:
 
     def __repr__(self) -> str:
         return f"GOATs(filename={self.filename!r}, generations={len(self)})"
+
+    def get_exp_for_gen(
+            self,
+            exp_id: int,
+            gen: int
+    ):
+        """Return the profiles of the results of
+        the selected experiment
+
+
+        Args:
+            exp_id (int): experiment id
+            gen (int): goat generation
+        
+        returns:
+            results: list[tuple[profiles, tuple[table, mdl_id]]]
+        """
+        for (mdl_gen, mdl_id) in self.generations[gen]:
+            self.sim_db.prepare_batch_select(
+                table=f"{self.prefix}{mdl_gen:04d}",
+                mdl_id=mdl_id,
+                experiment_id=exp_id
+            )
+
+        results: list[tuple[NDArray, tuple[str, int]]] = []
+        rslt = self.sim_db.batch_select()
+        for tbl in rslt:
+            for mdl_id in rslt[tbl]:
+                for exp_id in rslt[tbl][mdl_id]:
+                    results.append(
+                        (rslt[tbl][mdl_id][exp_id].T,
+                         (tbl,
+                          mdl_id)
+                         )
+                    )
+        return results

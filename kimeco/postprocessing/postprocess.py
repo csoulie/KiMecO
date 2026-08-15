@@ -3,6 +3,7 @@ import os
 import json
 import numpy as np
 import cantera.with_units as ctu
+import traceback
 from kimeco._kimeco import KiMecO, optimizer_prefix
 from kimeco.model import Model
 from kimeco.enums import ModelStatus
@@ -146,7 +147,8 @@ class PostProcess(KiMecO):
                     goats_models = self.goats.get_goat_for_gen(gen_id)
                 except Exception as e:
                     self.klog.warning(f"Could not load GOATs for {token}: {e}")
-                    continue
+                    traceback.print_exc()
+                    raise ValueError('An unexpected error has occured')
                 for mdl in goats_models:
                     new_mdl = Model(
                         sop=mdl.sop,

@@ -137,6 +137,8 @@ class Scoring:
                     )
         exp_score = 0
         for idx, exp in enumerate(self.settings['experiments']):
+            if exp.name not in mdl.sop.scores:
+                continue  # Skip the postprocess experiments
             exp_score += exp.weight/exp_divider * mdl.sop.scores[exp.name]
         mdl.theory_score = t_score
         mdl.experiment_score = exp_score

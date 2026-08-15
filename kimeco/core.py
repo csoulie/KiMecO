@@ -295,6 +295,7 @@ class CoreRun:
         mdl.rateCoef.set_status(table=table_name)
         if self.settings['postprocess'] and not mdl.rateCoef.missing_grid:
             # Every (P,T) cell already persisted: reuse and skip MESS.
+            mdl.rateCoef.recover_rslts()
             mdl.status = ModelStatus.KIN
             return
         if mdl.rateCoef.status == JobStatus.FINISHED:
