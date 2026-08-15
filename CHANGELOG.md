@@ -5,18 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-08-04
+
+### Added
+- In the example folder, the Analysis notebook now also shows how plot the extrapolated results (rate coefficients and concentration profiles).
+- Agentic delivery pipeline for repository development: a multi-stage subagent workflow (clarification, scope assessment, planning, spec review, boundaries, CI testing, version control) coordinated by a workflow orchestrator. It ships both as Claude Code subagents under `.claude/agents/` (with `.claude/settings.json`) and as a standalone Python/Claude-API implementation under `agentic_pipeline/`, runnable from the repository root via `python -m agentic_pipeline.cli "<request>"`.
+- New optional dependency group `agentic` in `pyproject.toml` (`anthropic>=0.69`, `pydantic>=2`, `pyyaml`) providing the packages needed to run the Python agentic pipeline (`pip install -e .[agentic]`).
+- New public query helper `SIM_DB.get_exp_for_table(exp_id, table)` returning, for a given experiment id and generation table, a list of `(profile.T, species)` for every model in that table (read-only accessor for analysis/plotting of postprocessed/extrapolated experiment profiles).
+- New public accessor `GOATs.get_exp_for_gen(exp_id, gen)` returning, for a given experiment id and GOAT generation snapshot, a list of `(profile.T, (table, mdl_id))` by resolving each ensemble member to its native generation table (`{prefix}{gen:04d}`) via `prepare_batch_select`/`batch_select`; this is the public API for retrieving an optimized-ensemble experiment's profiles across the members' native tables (needed for extrapolation analysis).
 
 ## [1.1.0] - 2026-08-04
 
 ### Added
-- In the example folder, the Analysis notebook now also shows how plot the extrapolated results (rate coefficients and concentration profiles).
 - TimeProfile data/error CSVs now accept an optional bracketed time unit on the first-column header (e.g. `time[s]`, `TIME [ms]`, `time[1e-3s]`, `time[1e-3]`). The `time` token is case-insensitive and whitespace tolerant; Cantera time units plus `ms`/`millisecond(s)` aliases and numeric-factor forms are supported, with seconds assumed when no bracket is given. A new `TimeProfile.time` property exposes the seconds-normalized time grid.
 - New public accessor `GOATs.get_goat_param_values(gen, cols)` returning `dict[str, np.ndarray]` of the requested SOP columns for a generation, in GOAT token order, without reconstructing models or running scoring (`gen == -1` selects the last generation; out-of-range raises `IndexError`).
 - Each optimizer now exposes a class-level `prefix` attribute (`GeneticAlgorithm='G'`, `NelderMead='NM'`, `NelderMeadSwarm='NMSG'`) recoverable without instantiation, and a settings→optimizer-prefix resolver drives the postprocessing table and GOATs-ensemble prefix.
 - `Model` and `SOP` objects now support value equality and hashing. Two `Model`s are equal when they share the same `SOP`, status, generation and id (hash derived from the SOP parameters, generation and id); two `SOP`s are equal when their `parameters_names` are identical.
-- New public query helper `SIM_DB.get_exp_for_table(exp_id, table)` returning, for a given experiment id and generation table, a list of `(profile.T, species)` for every model in that table (read-only accessor for analysis/plotting of postprocessed/extrapolated experiment profiles).
-- New public accessor `GOATs.get_exp_for_gen(exp_id, gen)` returning, for a given experiment id and GOAT generation snapshot, a list of `(profile.T, (table, mdl_id))` by resolving each ensemble member to its native generation table (`{prefix}{gen:04d}`) via `prepare_batch_select`/`batch_select`; this is the public API for retrieving an optimized-ensemble experiment's profiles across the members' native tables (needed for extrapolation analysis).
 
 ### Changed
 - Postprocessing/extrapolation now writes results into the primary run databases (`KMO_DB_SOP` / `KMO_DB_KIN` / `KMO_DB_SIM`) instead of separate extrapolation databases. Extrapolated rate coefficients and simulations are stored in the same per-generation tables where the model was originally created (`{optimizer_prefix}{gen:04d}`, e.g. `G0003`, `NM0002`, `NMSG0001`); the `GT` token (GOATs ensemble) now resolves to the originating optimizer's prefix (e.g. `G` for the genetic algorithm), so `GT` and `X` never appear as table names.
@@ -84,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.1
+[1.1.0]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/sandialabs/KiMecO/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/sandialabs/KiMecO/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
