@@ -139,6 +139,6 @@ can feature it here.
 
 Copyright (c) 2026 National Technology & Engineering Solutions of Sandia, LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.
 
-KiMecO is developed and maintained by Clément Soulié under the supervision of Lenny Sheps and Judith Zador.
+KiMecO is developed and maintained by Clément Soulié under the supervision of Lenny Sheps and Judith Zádor.
 CS thanks SNL and DOE for funding and support.
 <!-- TODO: add funding sources and institutional acknowledgements here. -->
