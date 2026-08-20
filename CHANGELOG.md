@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Multiplicative-parameter log-normal perturbation and the asymmetric sensitivity-analysis / Nelder-Mead derivative steps now use a corrected value-independent log-space sigma `log(1 + (std - 1) * max_std) / max_std`, so `±max_std·σ` coincides with the `get_boundaries` factor `1 + (std - 1) * max_std` (e.g. value 1 / std 1.2 / max_std 3 → ~99.7% of samples within `[1/1.6, 1.6]`); removed dead `get_mean_sigma`.
+
 ### Changed
 - Perturbation distribution validation is now enforced per parameter category. Multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, and individual/batch frequencies) accept only `log-normal` or `log-uniform`, while additive (`we`, `be`, `pow`) and percentage (`hrs`, `sigma`, `epsilon`, `fact`) parameters accept only `uniform` or `normal`. The backend now hard-fails invalid category/distribution combinations (previously only the additive class was checked), and the GUI perturbation dropdowns present only the valid distributions for each category.
 

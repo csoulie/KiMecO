@@ -1,5 +1,5 @@
 
-from copy import copy, deepcopy
+from copy import deepcopy
 from kimeco.logger_config import KMOLogger
 from typing import Any
 
@@ -151,24 +151,13 @@ class Perturbator:
         elif ptype in self.percent:
             return uncertainty * self.i_sop.parameters_names[param]
         elif ptype in self.multiplicative:
-            return (uncertainty-1) * self.i_sop.parameters_names[param]
+            # log-space sigma so that +/-max_std*sigma reaches the
+            # get_boundaries factor 1+(std-1)*max_std; value-independent by
+            # construction.
+            mult = self.settings['max_std']
+            return float(np.log(1 + (uncertainty - 1) * mult) / mult)
         else:
             raise TypeError('Unknown parameter type in get_scale.')
-
-    def get_mean_sigma(self,
-                       ptype: str,
-                       param: str,
-                       c_val: float,
-                       bounds: list[float]) -> tuple[float, float, float]:
-        local_c_val: float = copy(c_val)
-        scale: float = self.get_scale(ptype, param)
-        shift: float = min(bounds)
-        # local_c_val -= shift
-        variance: float = (scale/local_c_val) ** 2
-        sigma_squared: float = np.log(1 + variance)
-        sigma: float = float(np.sqrt(sigma_squared))
-        mean: float = float(np.log(local_c_val))
-        return mean, sigma, shift
 
     def get_rng(self,
                 ptype: str,
@@ -200,6 +189,8 @@ class Perturbator:
             return float(np.exp(np.random.uniform(low=np.log(bounds[0]),
                                                   high=np.log(bounds[1]))))
         elif distrib == Distrib.NORMAL:
+            # NOTE: unreachable for multiplicative params (constrained to
+            # LOGNORMAL/LOGUNIFORM in user_input.set_default_values).
             loc: float = c_val
             scale: float = self.get_scale(param=param,
                                           ptype=ptype)
@@ -209,12 +200,6 @@ class Perturbator:
             bounds = self.get_boundaries(
                 ptype=ptype,
                 i_val=i_val)
-            # mean, sigma, shift = self.get_mean_sigma(
-            #     param=param,
-            #     ptype=ptype,
-            #     c_val=c_val,
-            #     bounds=bounds)
-            # return float(np.random.lognormal(mean, sigma)) # + shift
             loc: float = c_val
             scale: float = self.get_scale(param=param,
                                           ptype=ptype)

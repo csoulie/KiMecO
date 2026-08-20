@@ -392,6 +392,9 @@ class KMOInput:
                             self.klog.warning(msg)
                             self.cancel_run = True
                     elif ptype.value in Pclass.MULTIPLICATIVE.value:
+                        # Multiplicative params are constrained to
+                        # LOGNORMAL/LOGUNIFORM, so multiplicative+NORMAL is
+                        # unreachable downstream in the Perturbator.
                         if dist != Distrib.LOGNORMAL and\
                            dist != Distrib.LOGUNIFORM:
                             msg = f"{key} is not allowed for this parameter."
