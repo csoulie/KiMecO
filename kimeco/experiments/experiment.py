@@ -94,6 +94,6 @@ class Experiment(ABC):
         except Exception as e:
             self.klog.error(f"Error checking template {self.sim_file}")
             self.klog.error(f"Necessary keywords: {keywords}")
-            self.klog.error(f"Exception: {e}")
+            self.klog.error(f"Exception: {e}", exc_info=True)
             raise e
 

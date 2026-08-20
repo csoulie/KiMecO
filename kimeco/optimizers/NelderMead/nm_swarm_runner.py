@@ -186,7 +186,7 @@ class NMSRunner(CoreRun):
                 self._process_single_model(mdl)
             except Exception as e:
                 self.remove_model(mdl)
-                self.klog.error(f'Status of model {mdl.id}: {mdl.status}')
+                self.klog.error(f'Status of model {mdl.id}: {mdl.status}', exc_info=True)
                 raise e
 
         # Remove and return
@@ -210,7 +210,7 @@ class NMSRunner(CoreRun):
         try:
             self._process_model_locked(mdl)
         except Exception as e:
-            self.klog.error(f'Error processing model {mdl.id}: {e}')
+            self.klog.error(f'Error processing model {mdl.id}: {e}', exc_info=True)
             raise e
 
         # Batch database operations (per model)

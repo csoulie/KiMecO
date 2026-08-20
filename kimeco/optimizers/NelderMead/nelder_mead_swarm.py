@@ -181,7 +181,8 @@ class NelderMeadSwarm:
                         f"NelderMead {nm_id:04d} completed successfully")
                 except Exception as exc:
                     self.klog.error(
-                        f"NelderMead {nm_id:04d} failed with exception: {exc}")
+                        f"NelderMead {nm_id:04d} failed with exception: {exc}",
+                        exc_info=True)
                     self.results.append({
                         'nm_id': nm_id,
                         'success': False,

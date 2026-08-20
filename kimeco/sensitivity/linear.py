@@ -102,7 +102,7 @@ class Linear(CoreRun):
                 table=self.name,
                 id=0)[1:]
         except Exception as e:
-            self.klog.debug(str(e))
+            self.klog.debug(str(e), exc_info=True)
             return False
 
         db_sop: SOP = SOP.from_db_row(

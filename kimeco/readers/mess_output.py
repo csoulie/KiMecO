@@ -139,7 +139,7 @@ class MessOutputReader:
                         # Happens when no space between two columns
                         # no space when the right value is very small
                         # and start with a minus sign
-                        self.klog.warning(str(e))
+                        self.klog.warning(str(e), exc_info=True)
                         table[From, To] = float(
                             re.sub(r'-\d+.\d+e-\d\d\d',
                                    ' 0.0 ',

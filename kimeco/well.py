@@ -61,7 +61,7 @@ class Well:
                 return self.r_scan(idx)
             except AttributeError as e:
                 klog: KMOLogger = create_logger(name='Well.log')
-                klog.debug(str(e))
+                klog.debug(str(e), exc_info=True)
                 raise AttributeError(
                     f'Well does not have the attribute {name}')
         else:
@@ -167,7 +167,8 @@ class Well:
                 ptype = Ptype(unctt.split('std_')[-1])
             except Exception as e:
                 msg = 'Unknown parameter in setting uncertainties'
-                print(e)
+                klog: KMOLogger = create_logger(name='Well.log')
+                klog.debug(str(e), exc_info=True)
                 raise TypeError(msg)
             if ptype in to_ignore:
                 continue

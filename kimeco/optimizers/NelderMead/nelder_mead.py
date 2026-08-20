@@ -403,7 +403,7 @@ class NelderMead:
                         id=0)[1:]
             except Exception as e:
                 sop_in_db = False
-                self.klog.debug(str(e))
+                self.klog.debug(str(e), exc_info=True)
 
             if sop_in_db:
                 db_sop: SOP = SOP.from_db_row(

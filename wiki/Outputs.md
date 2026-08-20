@@ -6,7 +6,7 @@ KiMecO writes both text outputs and SQLite databases.
 
 | File | Location | Content |
 |---|---|---|
-| KiMecO.log | Run launch directory (where `kmo input.json` is started) | Main run log. Contains progress messages, validation and initialization status, timing information, warnings, and errors. Existing log files are rotated with a date suffix when a new run starts with the same log filename. |
+| KiMecO.log | Run launch directory (where `kmo input.json` is started) | Main run log. Contains progress messages, validation and initialization status, timing information, warnings, and errors (errors now include the full Python traceback). Existing log files are rotated with a date suffix when a new run starts with the same log filename. |
 | score_info.txt | `KMO_Project/` (or your configured `project_name`) | Per-generation score summary for GOAT tracking. First line is a header (`ITER`, `BEST SCORE`, `GOAT AVERAGE`), followed by one row per generation with the best score and mean GOAT score. |
 | goats.txt | `KMO_Project/` | GOAT membership history by generation. Each line corresponds to one generation and stores model tokens as `gen_id_model_id` pairs (for example `3_42`), representing the selected best models used as the GOAT ensemble for that generation. |
 | GA_rates.out | `KMO_Project/` | Rate-statistics report written at GA convergence. Contains the selected model count after `max_score` filtering, then pressure/temperature-resolved tables of reaction rates (organized by PES), with geometric-mean and geometric-standard-deviation summaries across eligible models. |

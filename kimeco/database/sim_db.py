@@ -227,11 +227,11 @@ class SIM_DB(Kimeco_db):
                     else:
                         klog = setup_logger(name='sim_db.log')
                         klog.warning('An OperationalError occured in the db:')
-                        klog.warning(str(e))
+                        klog.warning(str(e), exc_info=True)
                 except Exception as e:
                     klog = setup_logger(name='sim_db.log')
                     klog.warning('An error occured in the database:')
-                    klog.warning(str(e))
+                    klog.warning(str(e), exc_info=True)
                     raise TypeError(e)
             else:
                 klog = setup_logger(name='sim.log')
@@ -296,11 +296,11 @@ class SIM_DB(Kimeco_db):
                     else:
                         klog = setup_logger(name='sim_db.log')
                         klog.warning('An OperationalError occured in the db:')
-                        klog.warning(str(e))
+                        klog.warning(str(e), exc_info=True)
                 except Exception as e:
                     klog = setup_logger(name='sim_db.log')
                     klog.warning('An error occured in the database:')
-                    klog.warning(str(e))
+                    klog.warning(str(e), exc_info=True)
                     raise TypeError(e)
             else:
                 klog = setup_logger(name='sim.log')

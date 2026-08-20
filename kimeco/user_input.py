@@ -180,7 +180,7 @@ class KMOInput:
             try:
                 exp['pres_unit'] = self._canonical_pressure_unit(exp_unit)
             except ValueError as e:
-                self.klog.info(str(e))
+                self.klog.info(str(e), exc_info=True)
                 self.cancel_run = True
 
         self.json_file['pres_unit'] = 'bar'
@@ -503,7 +503,7 @@ class KMOInput:
                 # raw_w.append(exp.weight)
                 # initial_x.append(ratio)
             except Exception as e:
-                self.klog.info(f"Experiment {idx} is invalid: {e}")
+                self.klog.info(f"Experiment {idx} is invalid: {e}", exc_info=True)
                 self.cancel_run = True
 
         if len(experiments) == 0:
@@ -596,7 +596,7 @@ class KMOInput:
                 pp_temp.add(exp.T)
                 pp_pres_pa.add(exp.P)
             except Exception as e:
-                self.klog.info(f"pp_experiment {idx} is invalid: {e}")
+                self.klog.info(f"pp_experiment {idx} is invalid: {e}", exc_info=True)
                 self.cancel_run = True
 
         if len(pp_experiments) == 0:

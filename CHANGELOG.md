@@ -8,9 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- CI now installs the `agentic` extra (`pip install -e .[test,agentic]`) so the agentic-pipeline tests (`test_agentic_pipeline_ci.py`) are collected and run, instead of aborting collection with `ModuleNotFoundError: No module named 'anthropic'`.
 - Multiplicative-parameter log-normal perturbation and the asymmetric sensitivity-analysis / Nelder-Mead derivative steps now use a corrected value-independent log-space sigma `log(1 + (std - 1) * max_std) / max_std`, so `±max_std·σ` coincides with the `get_boundaries` factor `1 + (std - 1) * max_std` (e.g. value 1 / std 1.2 / max_std 3 → ~99.7% of samples within `[1/1.6, 1.6]`); removed dead `get_mean_sigma`.
 
 ### Changed
+- Error log entries in the KiMecO logfile now include the full Python traceback. Every backend `try/except` that logged its error through `KMOLogger` now passes `exc_info=True`, so the traceback is appended after the message (log-line format unchanged). Postprocessing GOAT-load failures and `well.py` uncertainty-parsing errors now log with a traceback instead of writing to stderr / a bare `print`.
 - Perturbation distribution validation is now enforced per parameter category. Multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, and individual/batch frequencies) accept only `log-normal` or `log-uniform`, while additive (`we`, `be`, `pow`) and percentage (`hrs`, `sigma`, `epsilon`, `fact`) parameters accept only `uniform` or `normal`. The backend now hard-fails invalid category/distribution combinations (previously only the additive class was checked), and the GUI perturbation dropdowns present only the valid distributions for each category.
 
 ## [1.1.1] - 2026-08-04

@@ -221,7 +221,7 @@ class CoreRun:
                     try:
                         future.result()
                     except Exception as e:
-                        self.klog.error(f'Error processing model: {e}')
+                        self.klog.error(f'Error processing model: {e}', exc_info=True)
                         sys.exit(-1)
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
@@ -524,7 +524,7 @@ class CoreRun:
             self.sf.score(mdl=mdl)
             mdl.status = ModelStatus.TO_SAVE
         except IndexError as e:
-            self.klog.debug(str(e))
+            self.klog.debug(str(e), exc_info=True)
             # Occurs when a simulation didn't work so profiles were not saved
             mdl.status = ModelStatus.RESET
             self.klog.info(f'Resetting model {mdl.id}: error during scoring.')

@@ -414,7 +414,8 @@ class GeneticAlgorithm(ABC):
             except Exception as exc:
                 self.klog.warning(
                     'Failed to write GA convergence rate statistics: '
-                    f'{exc}'
+                    f'{exc}',
+                    exc_info=True
                 )
 
         self.klog.info('Run Sucessful.')
