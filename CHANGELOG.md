@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Perturbation distribution validation is now enforced per parameter category. Multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, and individual/batch frequencies) accept only `log-normal` or `log-uniform`, while additive (`we`, `be`, `pow`) and percentage (`hrs`, `sigma`, `epsilon`, `fact`) parameters accept only `uniform` or `normal`. The backend now hard-fails invalid category/distribution combinations (previously only the additive class was checked), and the GUI perturbation dropdowns present only the valid distributions for each category.
+
 ## [1.1.1] - 2026-08-04
 
 ### Added

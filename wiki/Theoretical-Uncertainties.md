@@ -29,6 +29,13 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 | std_sfc | 2.0 | Symmetry-factor uncertainty for barrierless reactions. While the symmetry has no uncertainty, this parameter allows to scale the state density. Multiplicative factor. |
 | std_mrc | 1.5 | Multi-dimensional rotor symmetry uncertainty. While the symmetry has no uncertainty, this parameter allows to scale the state density. Multiplicative factor. |
 
+**Distribution restrictions.** Each parameter belongs to a category that constrains which sampling distribution (`distrib_*`) it may use:
+
+- Multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, and the individual/batch frequencies) accept only `log-normal` or `log-uniform`.
+- Additive (`we`, `be`, `pow`) and percentage (`hrs`, `sigma`, `epsilon`, `fact`) parameters accept only `uniform` or `normal`.
+
+Any other combination cancels the run. In the GUI, only the valid distributions for a parameter's category are selectable.
+
 <!-- ### 4.3 Distributions (distrib_*)
 |---|---|---|
 | distrib_we | "normal" | Distribution for well energies. Additive class: no log distributions allowed. |

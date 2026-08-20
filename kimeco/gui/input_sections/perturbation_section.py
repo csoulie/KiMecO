@@ -297,7 +297,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-freq-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_multiplicative(),
                         value=default_settings[
                             f"distrib_{Ptype.IFC.value}"
                         ],
@@ -309,7 +309,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-bfc-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_multiplicative(),
                         value=default_settings[
                             f"distrib_{Ptype.BFC.value}"
                         ],
@@ -321,7 +321,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-hrs-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_percent(),
                         value=default_settings[
                             f"distrib_{Ptype.HRS.value}"
                         ],
@@ -333,7 +333,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-if-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_multiplicative(),
                         value=default_settings[
                             f"distrib_{Ptype.IF.value}"
                         ],
@@ -347,7 +347,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-etf-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_percent(),
                         value=default_settings[
                             f"distrib_{Ptype.ETF.value}"
                         ],
@@ -371,7 +371,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-epsi-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_percent(),
                         value=default_settings[
                             f"distrib_{Ptype.EPSI.value}"
                         ],
@@ -383,7 +383,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-sigma-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_percent(),
                         value=default_settings[
                             f"distrib_{Ptype.SIG.value}"
                         ],
@@ -395,7 +395,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-sfc-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_multiplicative(),
                         value=default_settings[
                             f"distrib_{Ptype.SFC.value}"
                         ],
@@ -407,7 +407,7 @@ def create_perturbation_section() -> html.Div:
                                className="form-label"),
                     dcc.Dropdown(
                         id="perturbation-distrib-mrc-dropdown",
-                        options=_distrib_options(),
+                        options=_distrib_options_for_multiplicative(),
                         value=default_settings[
                             f"distrib_{Ptype.MRC.value}"
                         ],
@@ -503,16 +503,26 @@ def create_perturbation_section() -> html.Div:
     ], className="card p-3 mt-3", id="perturbation-card")
 
 
-def _distrib_options() -> list:
-    """Return all distribution options."""
+def _distrib_options_for_additive() -> list:
+    """Return allowed distributions for additive parameters."""
+    allowed = [Distrib.UNIFORM, Distrib.NORMAL]
     return [
         {"label": d.value, "value": d.value}
-        for d in Distrib
+        for d in allowed
     ]
 
 
-def _distrib_options_for_additive() -> list:
-    """Return allowed distributions for additive parameters."""
+def _distrib_options_for_multiplicative() -> list:
+    """Return allowed distributions for multiplicative parameters."""
+    allowed = [Distrib.LOGNORMAL, Distrib.LOGUNIFORM]
+    return [
+        {"label": d.value, "value": d.value}
+        for d in allowed
+    ]
+
+
+def _distrib_options_for_percent() -> list:
+    """Return allowed distributions for percent parameters."""
     allowed = [Distrib.UNIFORM, Distrib.NORMAL]
     return [
         {"label": d.value, "value": d.value}
@@ -678,6 +688,58 @@ def enforce_additive_distributions(_dummy) -> Tuple[list, list, list]:
     """Ensure additive-only parameters use allowed distributions."""
     options_additive = _distrib_options_for_additive()
     return (options_additive, options_additive, options_additive)
+
+
+@callback(
+    output=[
+        Output("perturbation-distrib-freq-dropdown", "options"),
+        Output("perturbation-distrib-bfc-dropdown", "options"),
+        Output("perturbation-distrib-if-dropdown", "options"),
+        Output("perturbation-distrib-sfc-dropdown", "options"),
+        Output("perturbation-distrib-mrc-dropdown", "options"),
+    ],
+    inputs=[
+        Input("perturbation-distrib-freq-dropdown", "id"),
+    ],
+    prevent_initial_call=True,
+)
+def enforce_multiplicative_distributions(
+    _dummy,
+) -> Tuple[list, list, list, list, list]:
+    """Ensure multiplicative parameters use allowed distributions."""
+    options_multiplicative = _distrib_options_for_multiplicative()
+    return (
+        options_multiplicative,
+        options_multiplicative,
+        options_multiplicative,
+        options_multiplicative,
+        options_multiplicative,
+    )
+
+
+@callback(
+    output=[
+        Output("perturbation-distrib-hrs-dropdown", "options"),
+        Output("perturbation-distrib-etf-dropdown", "options"),
+        Output("perturbation-distrib-epsi-dropdown", "options"),
+        Output("perturbation-distrib-sigma-dropdown", "options"),
+    ],
+    inputs=[
+        Input("perturbation-distrib-hrs-dropdown", "id"),
+    ],
+    prevent_initial_call=True,
+)
+def enforce_percent_distributions(
+    _dummy,
+) -> Tuple[list, list, list, list]:
+    """Ensure percent parameters use allowed distributions."""
+    options_percent = _distrib_options_for_percent()
+    return (
+        options_percent,
+        options_percent,
+        options_percent,
+        options_percent,
+    )
 
 
 @callback(
@@ -871,17 +933,34 @@ def update_perturbation_config(
         default_settings[f"conv_{Ptype.ETP.value}"],
     }
 
-    # Validate additive distributions
-    additive_ptypes = Pclass.ADDITIVE.value
-    for ptype in additive_ptypes:
+    # Validate distributions per parameter class
+    log_dists = (Distrib.LOGNORMAL.value, Distrib.LOGUNIFORM.value)
+    for ptype in Pclass.ADDITIVE.value:
         distrib_key = f"distrib_{ptype}"
         if distrib_key in config:
             dist_val = config[distrib_key]
-            if (dist_val == Distrib.LOGNORMAL.value or
-                    dist_val == Distrib.LOGUNIFORM.value):
+            if dist_val in log_dists:
                 warnings.append(
                     f"{distrib_key}: log distributions not "
                     f"allowed for additive type {ptype}"
+                )
+    for ptype in Pclass.PERCENT.value:
+        distrib_key = f"distrib_{ptype}"
+        if distrib_key in config:
+            dist_val = config[distrib_key]
+            if dist_val in log_dists:
+                warnings.append(
+                    f"{distrib_key}: log distributions not "
+                    f"allowed for percent type {ptype}"
+                )
+    for ptype in Pclass.MULTIPLICATIVE.value:
+        distrib_key = f"distrib_{ptype}"
+        if distrib_key in config:
+            dist_val = config[distrib_key]
+            if dist_val not in log_dists:
+                warnings.append(
+                    f"{distrib_key}: only log distributions "
+                    f"allowed for multiplicative type {ptype}"
                 )
 
     if warnings:

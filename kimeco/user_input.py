@@ -391,6 +391,18 @@ class KMOInput:
                             msg = f"{key} is not allowed for this parameter."
                             self.klog.warning(msg)
                             self.cancel_run = True
+                    elif ptype.value in Pclass.MULTIPLICATIVE.value:
+                        if dist != Distrib.LOGNORMAL and\
+                           dist != Distrib.LOGUNIFORM:
+                            msg = f"{key} is not allowed for this parameter."
+                            self.klog.warning(msg)
+                            self.cancel_run = True
+                    elif ptype.value in Pclass.PERCENT.value:
+                        if dist == Distrib.LOGNORMAL or\
+                           dist == Distrib.LOGUNIFORM:
+                            msg = f"{key} is not allowed for this parameter."
+                            self.klog.warning(msg)
+                            self.cancel_run = True
                     self.json_file[key] = Distrib(
                         self.json_file[key].casefold())
                 else:

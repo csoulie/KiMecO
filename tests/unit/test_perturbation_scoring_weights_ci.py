@@ -1,6 +1,51 @@
+import kimeco.gui.input_sections.perturbation_section as pert_section
+from kimeco.enums import Distrib
 from kimeco.gui.input_sections.perturbation_section import (
+    _distrib_options_for_additive,
+    _distrib_options_for_multiplicative,
+    _distrib_options_for_percent,
     update_perturbation_config,
 )
+
+
+def _values(options: list) -> set:
+    return {opt["value"] for opt in options}
+
+
+def test_additive_options_are_exactly_uniform_and_normal() -> None:
+    values = _values(_distrib_options_for_additive())
+    assert values == {Distrib.UNIFORM.value, Distrib.NORMAL.value}
+    assert Distrib.LOGNORMAL.value not in values
+    assert Distrib.LOGUNIFORM.value not in values
+
+
+def test_multiplicative_options_are_exactly_log_distributions() -> None:
+    values = _values(_distrib_options_for_multiplicative())
+    assert values == {Distrib.LOGNORMAL.value, Distrib.LOGUNIFORM.value}
+    assert Distrib.UNIFORM.value not in values
+    assert Distrib.NORMAL.value not in values
+
+
+def test_percent_options_are_exactly_uniform_and_normal() -> None:
+    values = _values(_distrib_options_for_percent())
+    assert values == {Distrib.UNIFORM.value, Distrib.NORMAL.value}
+    assert Distrib.LOGNORMAL.value not in values
+    assert Distrib.LOGUNIFORM.value not in values
+
+
+def test_option_helpers_use_label_value_shape() -> None:
+    for helper in (_distrib_options_for_additive,
+                   _distrib_options_for_multiplicative,
+                   _distrib_options_for_percent):
+        options = helper()
+        assert len(options) == 2
+        for opt in options:
+            assert set(opt.keys()) == {"label", "value"}
+            assert opt["label"] == opt["value"]
+
+
+def test_legacy_generic_distrib_options_removed() -> None:
+    assert not hasattr(pert_section, "_distrib_options")
 
 
 def test_update_perturbation_config_preserves_zero_weights() -> None:
