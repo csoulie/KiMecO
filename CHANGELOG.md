@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-24
+
 ### Fixed
 - Fixed a bug where the postprocessing was reading rates from files on disk even when the rates are in db, potentially ready from MESS output calculated on a different P/T grid. This was causing a crash with an error P not in list, with P being the value in the file on disk not being in the postprocess conditions list. This is now bypassed, and the rates already in DB are always read from the DB.
 - CI now installs the `agentic` extra (`pip install -e .[test,agentic]`) so the agentic-pipeline tests (`test_agentic_pipeline_ci.py`) are collected and run, instead of aborting collection with `ModuleNotFoundError: No module named 'anthropic'`.
@@ -99,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.2]: https://github.com/sandialabs/KiMecO/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.1
 [1.1.0]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/sandialabs/KiMecO/compare/v1.0.3...v1.0.4
@@ -106,4 +109,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandialabs/KiMecO/releases/tag/v1.0.0
-[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...HEAD
