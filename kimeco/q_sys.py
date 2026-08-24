@@ -2,6 +2,7 @@ from enum import Enum
 from genericpath import isfile
 from kimeco.templates.pyjobarray import pyarrtpl
 from kimeco.templates.kin_arr_tpl import kin_arr_tpl
+from kimeco.templates.kin_arr_py_tpl import kin_arr_py_tpl
 from kimeco.templates.slurm import slurmtpl
 from kimeco.templates.slurm_arr import slurmarrtpl
 from subprocess import Popen, PIPE
@@ -219,7 +220,10 @@ class QueueingSystem:
         job_cmd: str
 
         if job['type'] == 'kin':
-            job_cmd = self.messtpl.format(filename=str(job['name'][0]))
+            tpl = (kin_arr_py_tpl
+                   if self.settings.get('use_automech', False)
+                   else self.messtpl)
+            job_cmd = tpl.format(filename=str(job['name'][0]))
         elif job['type'] == 'sim':
             filenames = [
                 f"{str(job['name'][0])}_exp{exp.tpl_idx:02d}.py"
@@ -283,16 +287,25 @@ class QueueingSystem:
             clear_err = False
             self.klog.warning(
                 f"Resetting job {job['name']} because an error occurred.")
-            p_outs: list[str] = sorted(glob.glob(f"{base}P*.out"))
+            p_outs: list[str] = [
+                f for f in sorted(glob.glob(f"{base}P*.out"))
+                if not os.path.basename(f).startswith('_')
+            ]
             for p_out in p_outs:
                 os.remove(p_out)
             return clear_err
 
-        p_outs: list[str] = sorted(glob.glob(f"{base}P*.out"))
+        p_outs: list[str] = [
+            f for f in sorted(glob.glob(f"{base}P*.out"))
+            if not os.path.basename(f).startswith('_')
+        ]
         if len(p_outs) != n_pes:
             return clear_err
 
-        p_errs: list[str] = glob.glob(f"{base}P*.err")
+        p_errs: list[str] = [
+            f for f in glob.glob(f"{base}P*.err")
+            if not os.path.basename(f).startswith('_')
+        ]
         if any(os.stat(p_err).st_size > 0 for p_err in p_errs):
             job['status'] = JobStatus.FAILED.value
             clear_err = False
@@ -347,6 +360,15 @@ class QueueingSystem:
             base: str = f"{job['loc']}/{job['name']}"
             for p_aux in glob.glob(f"{base}P*.aux"):
                 os.remove(p_aux)
+            # Automech-driven runs leave per-slot python driver scripts and
+            # leading-underscore pass-1 outputs. On success remove both; on
+            # failure keep the .py scripts so the job can be resubmitted.
+            if job['status'] == JobStatus.PICKED_UP.value:
+                for p_py in glob.glob(f"{base}P*.py"):
+                    os.remove(p_py)
+                underscore_base: str = f"{job['loc']}/_{job['name']}"
+                for p_pass1 in glob.glob(f"{underscore_base}P*.out"):
+                    os.remove(p_pass1)
 
     def submit(self, job) -> None:
         """Submit the job, and return the slurm's job id.
@@ -506,9 +528,15 @@ class QueueingSystem:
         base: str = str(job['loc']) + '/' + str(job['name'])
         if job['type'] == 'kin':
             n_pes: int = int(job['n_pes']) if int(job['n_pes']) > 0 else 1
-            p_inps: list[str] = sorted(glob.glob(base + 'P*.inp'))
-            return (len(p_inps) == n_pes and
-                    all(os.stat(p_inp).st_size > 0 for p_inp in p_inps))
+            if self.settings.get('use_automech', False):
+                p_files: list[str] = [
+                    f for f in sorted(glob.glob(base + 'P*.py'))
+                    if not os.path.basename(f).startswith('_')
+                ]
+            else:
+                p_files = sorted(glob.glob(base + 'P*.inp'))
+            return (len(p_files) == n_pes and
+                    all(os.stat(p_file).st_size > 0 for p_file in p_files))
         elif job['type'] == 'sim':
             n_unique_scripts: int = len(set(
                 exp.tpl_idx for exp in self.settings['experiments']

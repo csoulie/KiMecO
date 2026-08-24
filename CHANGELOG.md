@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional automech-driven two-pass MESS (WellExtension) path in the rate-coefficient pipeline, gated by a new boolean keyword `use_automech` (default `false`). When `false`, the existing single-pass MESS behavior is unchanged (KiMecO renders `{name}P{slot:02d}.inp` and runs `mess ...inp`). When `true`, KiMecO instead emits a self-contained per-job Python driver `{name}P{slot:02d}.py` that embeds the SOP's PES data inline (reads no database at runtime, avoiding concurrency errors), drives automech's stateless `mess_io` API to run MESS pass 1, preserves the pass-1 output as `_{name}P{slot:02d}.out`, calls `mess_io.well_lumped_input_file` to derive the WellExtension caps, then runs MESS pass 2 to produce the final `{name}P{slot:02d}.out`. The emitted script honors postprocessing partial re-runs (restricted `(P, T)` sub-grid) and reads external rotor and barrierless rotd/pp files from disk at runtime.
+- `automech` (`autoio`/`mess_io`) is an optional dependency required only when `use_automech=true`; its `mess_io` modules are imported during user-input reading (guarded by `_check_automech` in `user_input.full_run_settings`) and the run is cancelled early with a clear message if unavailable. No import is attempted when `use_automech=false`.
+
 ## [1.1.2] - 2026-08-24
 
 ### Fixed

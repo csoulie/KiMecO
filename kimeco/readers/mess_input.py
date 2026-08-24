@@ -487,6 +487,21 @@ class MessInputReader:
                                                 lnum=lnum)
                     continue
 
+                # ELECTRONIC LEVELS (additive: parse spin multiplicity /
+                # electronic degeneracies for the automech serializer without
+                # altering existing parsing/template behavior).
+                elif line.lstrip().casefold().startswith('electroniclevels'):
+                    tpl.append(line)
+                    try:
+                        nlevels = int(line.split()[1])
+                    except (IndexError, ValueError):
+                        nlevels = 0
+                    target = fname if last_item == 'frag' else name
+                    skip += self.save_elec_levels(name=target,
+                                                  lnum=lnum,
+                                                  nlevels=nlevels)
+                    continue
+
                 # All other lines
                 else:
                     tpl.append(line)
@@ -497,9 +512,80 @@ class MessInputReader:
                 if bar.connected[well_idx].dummy:
                     bar.connected[well_idx]._energy = \
                         bar.energy - bar._well_depth[well_idx]
+        self._default_elec_levels()
         self.shift_PESs()
         self.SOP.files2copy = self.files2copy
         return (self.SOP, self.tpls)
+
+    def save_elec_levels(self,
+                         name: str,
+                         lnum: int,
+                         nlevels: int) -> int:
+        """Additively parse an ``ElectronicLevels`` block.
+
+        Records the electronic states (energy in 1/cm, degeneracy) on the
+        target Well/Barrier/fragment item as ``elec_levels`` so the automech
+        serializer can build ``mess_io.writer.molecule``/``atom`` elec_levels.
+        The corresponding lines are appended to the template verbatim, exactly
+        as the fall-through path would, keeping template output unchanged.
+
+        Args:
+            name (str): Item name owning the electronic levels.
+            lnum (int): Header line number of the ElectronicLevels block.
+            nlevels (int): Number of electronic-level lines to consume.
+
+        Returns:
+            int: Number of consumed lines to skip in the main read loop.
+        """
+        fid: int = len(self.tpls) - 1
+        file: list[str] = self.pes_files[fid]
+        levels: list[list[float]] = []
+        read: int = 0
+        for line in file[lnum + 1:]:
+            if read >= nlevels:
+                break
+            tokens = line.split()
+            if len(tokens) >= 2:
+                try:
+                    energy = float(tokens[0])
+                    degen = float(tokens[1])
+                    deg_val: float = (
+                        int(degen) if degen == int(degen) else degen
+                    )
+                    levels.append([energy, deg_val])
+                except ValueError:
+                    pass
+            self.tpls[-1].append(line)
+            read += 1
+        if levels:
+            item = self.SOP.items.get(name)
+            if isinstance(item, Well):
+                item.elec_levels = levels
+        return read
+
+    def _default_elec_levels(self) -> None:
+        """Assign a singlet default to every Well/Barrier/fragment without a
+        parsed ElectronicLevels block.
+        """
+        items: list[Well] = []
+        seen: set[int] = set()
+        for well in self.SOP.wells:
+            items.append(well)
+        for bar in self.SOP.barriers:
+            items.append(bar)
+        for bim in self.SOP.bimolecular:
+            for frag in bim.fragments:
+                items.append(frag)
+        for item in items:
+            if id(item) in seen:
+                continue
+            seen.add(id(item))
+            if not hasattr(item, 'elec_levels'):
+                item.elec_levels = [[0.0, 1]]
+                self.klog.debug(
+                    f"No ElectronicLevels parsed for {item.name}; "
+                    "defaulting to singlet [[0.0, 1]]."
+                )
 
     def shift_PESs(self) -> None:
         """Shift the energies of species in different

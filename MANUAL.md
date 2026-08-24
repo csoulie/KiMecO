@@ -504,6 +504,7 @@ These settings are still part of default_settings and therefore can appear in ru
 | project_name | "KMO_Project" | Work directory/project folder name. |
 | log_level | 20 (INFO) | Logging verbosity. |
 | rc_software | "mess" | Master equation software backend selector. Currently the only other supported Master Equation backend. |
+| use_automech | false | Optional rate-coefficient path. When false, KiMecO runs the standard single-pass MESS. When true, KiMecO emits a per-PES Python driver that uses automech's `mess_io` API to run a two-pass MESS with automatic WellExtension well-lumping (pass 1, then an extended pass 2). Requires `automech` (`autoio`/`mess_io`) installed in both the run and job environments; the run is cancelled early with a clear message if it is missing. In the `kmo_start` GUI this appears under the "Rate Coefficients" category. |
 | restart | "default" | Restart strategy for database/table handling. Only other possible value is "rescore". Will not produce new models but will rescore existing ones. Be sure you know what you're doing if changing this option. Backing up your databases ahead is recommended as the scores will be overwritten.|
 | db_user | current username | Database user name. |
 | db_host | "127.0.0.1" | Database host address. |
@@ -522,6 +523,8 @@ KiMecO writes both text outputs and SQLite databases.
 | score_info.txt | `KMO_Project/` (or your configured `project_name`) | Per-generation score summary for GOAT tracking. First line is a header (`ITER`, `BEST SCORE`, `GOAT AVERAGE`), followed by one row per generation with the best score and mean GOAT score. |
 | goats.txt | `KMO_Project/` | GOAT membership history by generation. Each line corresponds to one generation and stores model tokens as `gen_id_model_id` pairs (for example `3_42`), representing the selected best models used as the GOAT ensemble for that generation. |
 | GA_rates.out | `KMO_Project/` | Rate-statistics report written at GA convergence. Contains the selected model count after `max_score` filtering, then pressure/temperature-resolved tables of reaction rates (organized by PES), with geometric-mean and geometric-standard-deviation summaries across eligible models. |
+| `{name}P{slot:02d}.out` | Per-job work directory | Final MESS rate-coefficient output for a PES slot. |
+| `_{name}P{slot:02d}.out` | Per-job work directory | Preserved MESS pass-1 output, written only when `use_automech=true`. It is the first-pass result kept before the automatic WellExtension well-lumping produces the extended pass-2 input whose result becomes `{name}P{slot:02d}.out`. |
 
 
 ### 7.2 Databases (run state and results)
@@ -548,4 +551,5 @@ The content of these databases is accessible from the **Databases** tab of the a
 - Postprocessing writes extrapolated results back into the primary run databases (`KMO_DB_KIN` / `KMO_DB_SIM`), into the same per-generation tables where the models were created; it no longer creates separate `PP_DB_KIN.db` / `PP_DB_SIM.db` files or `X`-prefixed tables. Already-computed rate coefficients are reused (only missing (P, T) conditions are recomputed), and extrapolated simulations are appended with banded experiment ids so the original run's results are never overwritten. This change is forward-only: pre-existing `PP_DB_*.db` files and old `X`-prefixed tables are not migrated.
 - Inputs can be prepared using the command `kmo_start`, which will generate a JSON file with the correct structure and chosen values. The JSON can then be edited manually or reloaded into the GUI for further editing.
 - While some analysis is possible using the GUI (called with keyword `kmoui`), it is still in development, and analysis of the results is best done using Jupyter notebooks or scripts that load the database and perform postprocessing.
+- When `use_automech=true`, the emitted per-PES driver currently assumes the following physical-fidelity defaults when building the two-pass MESS input: Lennard-Jones collider masses (bath N2 = 28.0134, species = heaviest well mass), `edown_cutoff = 15.0`, well/TS rigid-rotor `sym_factor = 1.0`, Fourier-expansion hindered rotors are skipped, and electronic levels are parsed from the original MESS input (defaulting to a singlet `[[0.0, 1]]` when absent). Verify these are appropriate for your system before relying on the automech path.
 

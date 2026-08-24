@@ -61,6 +61,10 @@ default_settings: dict[str, Any] = {
     "goat_length": 250,
     # Software to use for the master equation code
     "rc_software": "mess",
+    # Use the automech-driven two-pass MESS path (per-slot python driver
+    # scripts embedding the SOP, running MESS twice with mess_io-derived
+    # WellExtension caps) instead of the plain single-pass MESS input.
+    "use_automech": False,
     # MESS rate-coefficient grid for postprocessing. Derived at runtime
     # from the unique temperatures/pressures of pp_experiments
     # (not user-facing).

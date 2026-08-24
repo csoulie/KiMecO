@@ -6,6 +6,7 @@ from kimeco.database.kin_db import KIN_DB
 from kimeco.parameters import SOP
 from kimeco.q_sys import QueueingSystem, JobStatus
 from kimeco.writers.mess import MessWriter
+from kimeco.writers.automech_kin import AutomechKinWriter
 from kimeco.readers.mess_output import MessOutputReader
 import os
 import numpy as np
@@ -149,11 +150,22 @@ class RateCo:
             if self.settings['postprocess'] and self.missing_grid:
                 sub_p = sorted({p for p, _ in self.missing_grid})
                 sub_t = sorted({t for _, t in self.missing_grid})
-            for output_slot, software_tpl in enumerate(self.software_tpls):
-                mw = MessWriter(SOP=self.sop, tpl=software_tpl,
-                                pres=sub_p, temp=sub_t)
-                mw.write(loc=self.loc,
-                         filename=f'{self.name}P{output_slot:02d}.inp')
+            if self.settings.get('use_automech', False):
+                for output_slot in range(len(self.software_tpls)):
+                    aw = AutomechKinWriter(
+                        sop=self.sop,
+                        pes_id=self.output_pes_ids[output_slot],
+                        sub_p=sub_p,
+                        sub_t=sub_t,
+                        settings=self.settings)
+                    aw.write(loc=self.loc,
+                             filename=f'{self.name}P{output_slot:02d}.py')
+            else:
+                for output_slot, software_tpl in enumerate(self.software_tpls):
+                    mw = MessWriter(SOP=self.sop, tpl=software_tpl,
+                                    pres=sub_p, temp=sub_t)
+                    mw.write(loc=self.loc,
+                             filename=f'{self.name}P{output_slot:02d}.inp')
         else:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")

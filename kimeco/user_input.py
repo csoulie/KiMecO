@@ -631,6 +631,46 @@ class KMOInput:
                 self.klog.warning(f"{key} must be non-negative.")
                 self.cancel_run = True
 
+    def _check_automech(self) -> None:
+        """Verify the mess_io symbols required by the automech-driven MESS
+        path are importable before submitting any job.
+
+        The automech per-slot driver scripts emitted by
+        ``AutomechKinWriter`` import a fixed set of ``mess_io`` writer symbols
+        (plus ``mess_io.well_lumped_input_file``) at runtime on the compute
+        node. Missing any of them would only surface as an opaque node-side
+        crash, so fail fast here with an actionable message.
+        """
+        try:
+            from mess_io.writer import (  # noqa: F401
+                molecule,
+                atom,
+                core_rigidrotor,
+                core_multirotor,
+                core_phasespace,
+                core_rotd,
+                rotor_hindered,
+                rotor_internal,
+                well,
+                bimolecular,
+                ts_sadpt,
+                ts_variational,
+                global_energy_transfer_input,
+                global_rates_input_v1,
+                messrates_inp_str,
+                energy_down,
+                collision_frequency,
+            )
+            from mess_io import well_lumped_input_file  # noqa: F401
+        except ImportError as exc:
+            self.klog.warning(
+                "'use_automech' is enabled but the required mess_io symbols "
+                "could not be imported: "
+                f"{exc}. Install/expose the automech 'mess_io' package "
+                "(autoio) on this environment or set 'use_automech' to false."
+            )
+            self.cancel_run = True
+
     def full_run_settings(self) -> dict[str, Any]:
         """Merge the users settings with the default values.
 
@@ -648,6 +688,10 @@ class KMOInput:
         if self.json_file.get('pp_experiments'):
             self.create_pp_experiments()
         self.other_checks_to_modif()
+        self.json_file['use_automech'] = bool(
+            self.json_file.get('use_automech', False))
+        if self.json_file['use_automech']:
+            self._check_automech()
         if self.cancel_run:
             sys.exit(-1)
         self.json_file['init_loc'] = self.init_loc

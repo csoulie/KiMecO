@@ -1,3 +1,6 @@
 {
-  "agent": "workflow-orchestrator"
+  "agent": "workflow-orchestrator",
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
+  }
 }

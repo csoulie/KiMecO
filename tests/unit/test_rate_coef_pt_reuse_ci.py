@@ -207,6 +207,62 @@ def test_recover_rslts_partial_appends_only_missing_cells(
     assert row[0] >= PP_KIN_ROWID_BASE
 
 
+class _PlainSOP:
+    """Minimal placeholder-free SOP for the real MessWriter path."""
+
+    def __init__(self) -> None:
+        self.pes_ids = [0]
+        self.parameters_names: dict[str, str] = {}
+        self.items: dict[str, Any] = {}
+
+    def reaction_iterator(self):
+        return iter([])
+
+
+def _plain_rateco(tmp_path: Path, use_automech) -> RateCo:
+    settings: dict[str, Any] = {
+        'rc_software': 'mess',
+        'postprocess': False,
+        'rc_pres': [1.0],
+        'rc_temp': [300.0],
+        'cpu_kin': 2,
+        'mem_kin': 500,
+    }
+    if use_automech is not None:
+        settings['use_automech'] = use_automech
+    rc = RateCo(
+        sop=cast(Any, _PlainSOP()),
+        settings=settings,
+        software_tpls=[['Static input line\n', 'Another line\n']],
+        id=0,
+        q_idx=1,
+        name='G0000E0000',
+        loc=str(tmp_path),
+        q_sys=cast(Any, _StatusQueue()),
+        db=cast(Any, _FakeKinDB([])),
+        klog=KMOLogger(filename=str(tmp_path / 'plain.log')),
+    )
+    Path(rc.loc).mkdir(parents=True, exist_ok=True)
+    return rc
+
+
+def test_create_input_absent_vs_false_use_automech_byte_identical_inp(
+        tmp_path: Path) -> None:
+    # The classic MESS path must be unchanged whether use_automech is absent
+    # or explicitly False: both produce byte-identical P00.inp via MessWriter.
+    rc_absent = _plain_rateco(tmp_path / 'absent', use_automech=None)
+    rc_false = _plain_rateco(tmp_path / 'false', use_automech=False)
+
+    rc_absent.create_input()
+    rc_false.create_input()
+
+    inp_absent = (Path(rc_absent.loc) / 'G0000E0000P00.inp').read_bytes()
+    inp_false = (Path(rc_false.loc) / 'G0000E0000P00.inp').read_bytes()
+
+    assert inp_absent == inp_false
+    assert b'Static input line' in inp_absent
+
+
 def test_recover_rslts_normal_run_writes_full_grid_low_ids(
         tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(

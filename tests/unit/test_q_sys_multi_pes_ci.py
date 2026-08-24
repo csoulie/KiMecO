@@ -105,6 +105,54 @@ def test_pickup_kin_marks_picked_up_when_all_outputs_and_errs_are_clean(
     assert JobStatus(job["status"]) == JobStatus.PICKED_UP
 
 
+def test_kin_slurm_absent_vs_false_use_automech_is_byte_identical(
+    tmp_path: Path,
+) -> None:
+    # An absent use_automech key must behave exactly like an explicit False.
+    # Same location so the embedded scratchdir path is identical; only the
+    # use_automech flag varies between the two writes.
+    slurm = tmp_path / "G0000E0009.slurm"
+    klog = KMOLogger(filename=str(tmp_path / "byte.log"))
+
+    settings_absent = _settings(tmp_path)
+    qs_absent = QueueingSystem(settings=settings_absent, nel=4, klog=klog)
+    qs_absent.add_to_q(
+        name="G0000E0009", idx=0, location=str(tmp_path),
+        jtype="kin", ressources=(2, 500), n_pes=2)
+    bytes_absent = slurm.read_bytes()
+
+    settings_false = _settings(tmp_path)
+    settings_false["use_automech"] = False
+    qs_false = QueueingSystem(settings=settings_false, nel=4, klog=klog)
+    qs_false.add_to_q(
+        name="G0000E0009", idx=0, location=str(tmp_path),
+        jtype="kin", ressources=(2, 500), n_pes=2)
+    bytes_false = slurm.read_bytes()
+
+    assert bytes_absent == bytes_false
+    assert b"mess G0000E0009P${FORMATTED_ID}.inp" in bytes_absent
+
+
+def test_factually_ready_kin_false_path_keys_off_inp(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings["use_automech"] = False
+    klog = KMOLogger(filename=str(tmp_path / "false_ready.log"))
+    qs = QueueingSystem(settings=settings, nel=4, klog=klog)
+    qs.add_to_q(
+        name="G0000E0010", idx=0, location=str(tmp_path),
+        jtype="kin", ressources=(2, 500), n_pes=2)
+    job = qs.kin_q[0]
+
+    # A .py driver must not satisfy the classic (mess) path.
+    (tmp_path / "G0000E0010P00.py").write_text("driver")
+    (tmp_path / "G0000E0010P01.py").write_text("driver")
+    assert not qs.factually_ready(job)
+
+    (tmp_path / "G0000E0010P00.inp").write_text("input-0")
+    (tmp_path / "G0000E0010P01.inp").write_text("input-1")
+    assert qs.factually_ready(job)
+
+
 def test_pickup_kin_marks_failed_on_non_empty_log_err_and_removes_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
