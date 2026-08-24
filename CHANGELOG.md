@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed a bug where the postprocessing was reading rates from files on disk even when the rates are in db, potentially ready from MESS output calculated on a different P/T grid. This was causing a crash with an error P not in list, with P being the value in the file on disk not being in the postprocess conditions list. This is now bypassed, and the rates already in DB are always read from the DB.
 - CI now installs the `agentic` extra (`pip install -e .[test,agentic]`) so the agentic-pipeline tests (`test_agentic_pipeline_ci.py`) are collected and run, instead of aborting collection with `ModuleNotFoundError: No module named 'anthropic'`.
 - Multiplicative-parameter log-normal perturbation and the asymmetric sensitivity-analysis / Nelder-Mead derivative steps now use a corrected value-independent log-space sigma `log(1 + (std - 1) * max_std) / max_std`, so `±max_std·σ` coincides with the `get_boundaries` factor `1 + (std - 1) * max_std` (e.g. value 1 / std 1.2 / max_std 3 → ~99.7% of samples within `[1/1.6, 1.6]`); removed dead `get_mean_sigma`.
 

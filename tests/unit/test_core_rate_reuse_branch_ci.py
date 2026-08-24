@@ -68,8 +68,10 @@ def test_pp_full_reuse_sets_kin_and_skips_mess(monkeypatch) -> None:
     core.calculate_rate_coefficients(cast(Any, mdl))
 
     # Full grid already persisted -> reuse and skip the MESS submission.
+    # The reuse branch no longer re-parses on-disk MESS .out files
+    # (recover_rslts); rates are rebuilt from KIN_DB at simulation time.
     assert mdl.status == ModelStatus.KIN
-    assert _FakeRateCo.last.recover_called is True
+    assert _FakeRateCo.last.recover_called is False
     assert _FakeRateCo.last.q_up_called is False
 
 

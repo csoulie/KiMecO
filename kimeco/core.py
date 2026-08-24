@@ -295,7 +295,12 @@ class CoreRun:
         mdl.rateCoef.set_status(table=table_name)
         if self.settings['postprocess'] and not mdl.rateCoef.missing_grid:
             # Every (P,T) cell already persisted: reuse and skip MESS.
-            mdl.rateCoef.recover_rslts()
+            # Do NOT re-parse on-disk MESS .out files here — in a reused GA
+            # project they are stale outputs on a different pressure grid.
+            # run_simulation() rebuilds rc_by_pes via load_rates_from_db(KIN_DB).
+            self.klog.debug(
+                f'Model {mdl.id}: postprocess reuse — skipping recover_rslts(); '
+                f'rates will be loaded from KIN_DB at simulation time.')
             mdl.status = ModelStatus.KIN
             return
         if mdl.rateCoef.status == JobStatus.FINISHED:
