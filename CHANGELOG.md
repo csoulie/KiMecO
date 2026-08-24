@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.3] - 2026-08-24
+
+### Fixed
+- Theory-score contribution for multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) is now computed in log space as `(ln(value / reference) / ln(uncertainty))**2`, replacing the previous linear distance/scale. The penalty is now symmetric under a factor `f` versus its inverse `1/f` and consistent with the perturbator's log-normal (log-space) sampling of those parameters. Additive and percentage parameters are unchanged. This is the scoring-side counterpart of the log-space perturbation correction shipped in [1.1.2].
 
 ## [1.1.2] - 2026-08-24
 
@@ -101,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.3]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandialabs/KiMecO/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.1
 [1.1.0]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.0
@@ -109,4 +113,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandialabs/KiMecO/releases/tag/v1.0.0
-[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.3...HEAD

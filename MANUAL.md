@@ -327,6 +327,8 @@ The same is applicable to `__fact` and `__pow` for the energy transfer parameter
 
 Any other combination cancels the run. In the GUI, only the valid distributions for a parameter's category are selectable.
 
+For multiplicative parameters the theory-score distance is measured in log space as `ln(value / reference) / ln(uncertainty)`, so the penalty is symmetric under a factor and its inverse and consistent with the log-normal (log-space) perturbation of these parameters. Additive and percentage parameters keep their linear distance.
+
 <!-- ### 4.3 Distributions (distrib_*)
 |---|---|---|
 | distrib_we | "normal" | Distribution for well energies. Additive class: no log distributions allowed. |

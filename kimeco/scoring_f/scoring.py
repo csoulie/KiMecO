@@ -31,7 +31,7 @@ def get_parameter_uncertainty_scale(
     elif ptype.value in Pclass.PERCENT.value:
         scale = uncertainty * reference_value
     elif ptype.value in Pclass.MULTIPLICATIVE.value:
-        scale = (uncertainty - 1.0) * reference_value
+        scale = np.log(uncertainty)
     else:
         raise TypeError(f"Unknown parameter type '{ptype.value}'.")
 
@@ -70,7 +70,10 @@ class Scoring:
             # Theory term must be neutral so SA can rank perturbations.
             return 0.0
         for p in sop_active_p:
-            score = sop.parameters_names[p] - self.SOP.parameters_names[p]
+            if get_parameter_type(p).value in Pclass.MULTIPLICATIVE.value:
+                score = np.log(sop.parameters_names[p] / self.SOP.parameters_names[p])
+            else:
+                score = sop.parameters_names[p] - self.SOP.parameters_names[p]
             score /= get_parameter_uncertainty_scale(
                 reference_values=self.SOP.parameters_names,
                 reference_uncertainties=self.SOP.uncertainties,
