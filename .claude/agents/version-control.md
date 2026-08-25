@@ -37,6 +37,7 @@ Only touch docs when the change actually affects them; do not churn unrelated pa
 
 ## Constraints and Invariants
 
+- **Never run `git commit` (or `git tag`, `git push`, `git merge`) on your own.** Your default output is edited-but-uncommitted files in the working tree. You create a commit ONLY when the orchestrator relays an explicit user request to commit, and you never infer that request from the mere fact that a change was implemented. This applies to routine changelog/doc runs AND to release cuts: the commit/merge/tag steps below execute only under an explicit, user-approved instruction. When in doubt, leave the changes staged/unstaged and report that a commit is pending user approval.
 - Follow Semantic Versioning (MAJOR.MINOR.PATCH); tags are always `v<version>`.
 - The version string must be identical across `pyproject.toml`, `setup.py`, and `meta.yaml` at all times.
 - Every release corresponds to a `--no-ff` merge into `main` plus one annotated tag — never tag a mid-`Development` commit.

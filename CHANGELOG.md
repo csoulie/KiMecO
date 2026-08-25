@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-25
+
 ### Added
 - New user-settable input keyword `q_name` (default `day-long-cpu`) exposing the queuing system's queue/partition as a free-form string passed to SLURM via `#SBATCH -p`. Registered in `default_settings`, read by `QueueingSystem`, and surfaced in the launcher GUI (Resources section, with save/load round-trip) and the dashboard metadata.
-
-## [1.1.4] - 2026-08-25
 
 ### Fixed
 - The direction-dependent sensitivity-analysis and Nelder-Mead derivative step now handles multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) with a truly multiplicative, direction-dependent step: with factor `f = 1 + (uc - 1) * sensi_d` (Nelder-Mead uses `nm_dstep`), the up step (side `+1`) is `value * f` and the down step (side `-1`) is `value / f` (e.g. `uc=1.1`, `sensi_d=0.1` → steps `[1/1.01, 1.01]`). Previously the step keyed off the parameter's log-normal **distribution** rather than its **class** and applied a log-space scale additively, producing a wrong / symmetric step for multiplicative parameters. Additive and percentage parameters (`value + scale * sensi_d * side`) are unchanged. This is the perturbation-step counterpart of the log-space multiplicative scoring fix in [1.1.3].
