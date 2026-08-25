@@ -725,6 +725,7 @@ def save_config_download(
     Output("res-max-jobs", "value"),
     Output("res-max-user-jobs", "value"),
     Output("res-exclude-nodes", "value"),
+    Output("res-q-name", "value"),
     Input("load-config-button", "n_clicks"),
     Input("autoload-config-path-store", "data"),
     State("output-filename-input", "value"),
@@ -734,7 +735,7 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
     """Load JSON config from disk and update GUI controls/stores."""
     triggered_id = callback_context.triggered_id
     if not n_clicks and triggered_id != "autoload-config-path-store":
-        return (no_update,) * 68
+        return (no_update,) * 69
 
     try:
         requested_path = autoload_path if triggered_id == "autoload-config-path-store" else config_path
@@ -849,10 +850,11 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
             loaded.get("max_jobs", default_settings["max_jobs"]),
             loaded.get("max_user_jobs", default_settings["max_user_jobs"]),
             loaded.get("exclude_nodes", default_settings["exclude_nodes"]),
+            loaded.get("q_name", default_settings["q_name"]),
         )
     except Exception as exc:
         return (
             f"Failed to load config: {exc}",
             _status_style(success=False),
-            *([no_update] * 66),
+            *([no_update] * 67),
         )

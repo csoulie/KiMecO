@@ -9,10 +9,10 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.goat import GOATs
 from kimeco.sensitivity.linear import Linear
 from kimeco.model import Model
-from kimeco.enums import ModelStatus, Ptype, Pclass, Distrib
+from kimeco.enums import ModelStatus, Ptype, Pclass
 from kimeco.parameters import SOP
 from kimeco.generation import Generation
-from kimeco.scoring_f.scoring import Scoring
+from kimeco.scoring_f.scoring import Scoring, get_parameter_type
 from kimeco.logger_config import KMOLogger
 
 
@@ -93,12 +93,15 @@ class NelderMead:
                     for p in self.current_dimensions
                 ])
             else:
-                dstep: float = self.calculate_dstep(
+                new_value: float = self.calculate_dstep(
                     uc=self.f_mdl.sop.uncertainties[
                         self.current_dimensions[i-1]
                     ],
                     param=self.current_dimensions[i-1],
-                    side=1)
+                    side=1,
+                    value=self.last_vertice.parameters_names[
+                        self.current_dimensions[i-1]
+                    ])
                 simplex[i] = np.array([
                     self.get_normalized(
                         parameter=p,
@@ -106,8 +109,7 @@ class NelderMead:
                     if p != self.current_dimensions[i-1]
                     else self.get_normalized(
                         parameter=p,
-                        value=self.last_vertice.parameters_names[p]
-                        + dstep)
+                        value=new_value)
                     for p in self.current_dimensions
                 ])
         return simplex
@@ -115,33 +117,29 @@ class NelderMead:
     def calculate_dstep(self,
                         uc: float,
                         param: str,
-                        side: int) -> float:
-        """Calculate the size of the derivative
-        step depending on the type of parameter.
+                        side: int,
+                        value: float) -> float:
+        """Apply the derivative step to a parameter value depending
+        on the type of parameter.
 
         Args:
             uc (float): uncertainty value for this parameter
             param (str): full name of the parameter
             side (int): side of the derivative
+            value (float): current value of the parameter
 
         Returns:
-            float: derivative step
+            float: the perturbed value
         """
-        # Recognise type of parameter
-        ptype: Ptype = Ptype.WE
-        for ptype in Ptype:
-            if ptype.value in param:
-                break
+        ptype = get_parameter_type(param)
+        if ptype.value in Pclass.MULTIPLICATIVE.value:
+            factor: float = 1 + (uc - 1) * self.settings['nm_dstep']
+            return value * factor if side == 1 else value / factor
         scale: float = self.pert.get_scale(
                 ptype=ptype.value,
                 param=param
             )
-        # Assymetric derivative for lognormal distribution
-        if self.pert.distribs[ptype] == Distrib.LOGNORMAL and side == -1:
-            dstep: float = scale/uc
-        else:
-            dstep = scale
-        return dstep * self.settings['nm_dstep']
+        return value + scale * self.settings['nm_dstep'] * side
 
     def get_normalized(self,
                        parameter: str,

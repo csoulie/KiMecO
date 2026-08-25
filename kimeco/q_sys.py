@@ -83,7 +83,7 @@ class QueueingSystem:
             self.subtpl = self.subtpl.replace(line, '')
 
         self.pyarrtpl: str = pyarrtpl
-        self.q_name: str = q_name
+        self.q_name: str = self.settings['q_name']
         self.messtpl = kin_arr_tpl
 
         # Define a dtype object to create a structured numpy array.

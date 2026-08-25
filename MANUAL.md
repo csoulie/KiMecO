@@ -226,6 +226,8 @@ This section controls both static sensitivity-based parameter selection and on-t
 | SA_end | 80 | Generation index to stop on-the-fly sensitivity analysis. |
 | SA_freq | 20 | Frequency (in generations) for running on-the-fly sensitivity updates.
 
+The derivative step is direction-dependent and set by the parameter's class (not its sampling distribution). For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative: with factor `f = 1 + (uc - 1) * sensi_d` (where `uc` is the parameter uncertainty), the up step is `value * f` and the down step is `value / f` (e.g. `uc = 1.1`, `sensi_d = 0.1` → perturbed values `[value / 1.01, value * 1.01]`). Additive and percentage parameters use an additive step, `value + scale * sensi_d * side`.
+
 ## 3) Optimizer
 
 This section selects optimization mode and maps GUI scheme choices to runtime optimizer fields.
@@ -255,6 +257,8 @@ These keywords control Nelder-Mead behavior. They are only used if optimizer is 
 | nm_maxfev | 0 | NM max function evaluations (0 means solver default behavior where applicable). |
 | nm_dstep | 0.5 | Initial simplex scaling step for NM. The simplex is created using a derivative step of every active parameters, plus the initial model. |
 | nm_adaptive | false | Enables adaptive Nelder-Mead variant. |
+
+The derivative step used to build the initial simplex is direction-dependent and set by the parameter's class. For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative: with factor `f = 1 + (uc - 1) * nm_dstep`, the up step is `value * f` and the down step is `value / f`, so the two sides are symmetric under a factor and its inverse. Additive and percentage parameters use an additive step.
 
 During the final stage of optimization, the Nelder-Mead algorithm is run again with tighter tolerances after a second sensitivity analysis from the previously optimized simplex. These keywords control the final-stage NM behavior. They are only used if optimizer is set to "nelder-mead". See SciPy documentation for details on the Nelder-Mead algorithm and its parameters (https://docs.scipy.org/doc/scipy/reference/optimize.minimize-neldermead.html).
 
@@ -350,7 +354,7 @@ For multiplicative parameters the theory-score distance is measured in log space
 |---|---|---|
 | max_score | 4.0 | Convergence threshold. Maximum score for the best-model ensemble. |
 | score_conv | 2 | Convergence threshold. Average score for best-model ensemble. |
-| param_conv | 0.01 | Parameter-space convergence threshold used for both parameters values and standard deviations. Percentage. |
+| param_conv | 0.01 | Parameter-space convergence threshold used for both parameter values and standard deviations. For additive and percentage parameters it is a percentage (relative change). For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) genetic-algorithm convergence is measured in log space as `|ln(old / new)|` for both the mean and the standard deviation, consistent with their log-normal perturbation. |
 | conv_we | 0.1 | Convergence threshold for well energies.(kcal/mol) |
 | conv_be | 0.1 | Convergence threshold for barrier energies.(kcal/mol) |
 | conv_pow | 0.01 | Convergence threshold for energy transfer power. |
@@ -494,6 +498,7 @@ This section controls per-job SLURM resources and global scheduling limits.
 | max_jobs | 600 | Maximum submitted jobs for current KiMecO instance. |
 | max_user_jobs | 1500 | Maximum submitted jobs for the current user. |
 | exclude_nodes | "" | Comma-separated SLURM nodes to exclude. |
+| q_name | day-long-cpu | SLURM partition/queue name passed to #SBATCH -p. |
 
 
 ## Additional Global Keywords

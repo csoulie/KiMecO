@@ -57,9 +57,9 @@ For multiplicative parameters the theory-score distance is measured in log space
 
 | Keyword | Default value | Description |
 |---|---|---|
-| max_score | 4.0 | Convergence threshold. Maximum score for the best-model ensemble. |
-| score_conv | 2 | Convergence threshold. Average score for best-model ensemble. |
-| param_conv | 0.01 | Parameter-space convergence threshold used for both parameters values and standard deviations. Percentage. |
+| max_score | 4.0 | Convergence threshold. Maximum score for the best-model ensemble has to be lower. |
+| score_conv | 2 | Convergence threshold. Average score for best-model ensemble has to be lower. |
+| param_conv | 0.01 | Parameter-space convergence threshold used for both parameter values and standard deviations. For additive and percentage parameters it is a percentage (relative change). For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) genetic-algorithm convergence is measured in log space as `|ln(old / new)|` for both the mean and the standard deviation, consistent with their log-normal perturbation. |
 | conv_we | 0.1 | Convergence threshold for well energies.(kcal/mol) |
 | conv_be | 0.1 | Convergence threshold for barrier energies.(kcal/mol) |
 | conv_pow | 0.01 | Convergence threshold for energy transfer power. |
