@@ -6,16 +6,15 @@ from kimeco.logger_config import KMOLogger
 from typing import Any, List
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
-from kimeco.enums import ModelStatus, Pclass, Ptype, RestartType
+from kimeco.enums import ModelStatus, Pclass, RestartType
 from kimeco.generation import Generation
 from kimeco.parameters import SOP
 from kimeco.Perturbators.perturbator import Perturbator
-from kimeco.scoring_f.scoring import Scoring
+from kimeco.scoring_f.scoring import Scoring, get_parameter_type
 from kimeco.database.sop_db import SOP_DB
 from kimeco.model import Model
 import numpy as np
 from kimeco.sensitivity.linear import Linear
-from kimeco.database.kimeco_db import dbs
 from kimeco.goat import GOATs
 
 
@@ -111,14 +110,24 @@ class GeneticAlgorithm(ABC):
                 self.__converged[key] = False
             # Find the type of parameter
         for key in self.old_means:
-            for ptype in Ptype:
-                if ptype.value in key.split(dbs)[1]:
-                    break
+            ptype = get_parameter_type(key)
             if ptype.value in Pclass.ADDITIVE.value:
                 mean_thresh: float = self.settings[f'conv_{ptype.value}']
                 std_thresh: float = self.settings[f'conv_{ptype.value}']
                 m_change: float = self.means[key] - self.old_means[key]
                 s_change: float = self.stds[key] - self.old_stds[key]
+            elif ptype.value in Pclass.MULTIPLICATIVE.value:
+                # Avoids dividing by 0
+                if self.old_means[key] == 0 or\
+                   self.old_stds[key] == 0:
+                    self.__converged[key] = False
+                    continue
+                mean_thresh = self.settings['param_conv']
+                std_thresh = self.settings['param_conv']
+                m_change: float = abs(
+                    np.log(self.old_means[key]/self.means[key]))
+                s_change: float = abs(
+                    np.log(self.old_stds[key]/self.stds[key]))
             else:
                 # Avoids dividing by 0
                 if self.old_means[key] == 0 or\

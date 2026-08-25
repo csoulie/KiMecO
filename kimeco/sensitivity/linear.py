@@ -1,4 +1,4 @@
-from kimeco.enums import Distrib, Ptype, RestartType
+from kimeco.enums import Pclass, Ptype, RestartType
 from typing import Any
 import numpy as np
 from numpy.typing import NDArray
@@ -9,7 +9,7 @@ from kimeco.database.kimeco_db import dbs
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.scoring_f.scoring import Scoring
+from kimeco.scoring_f.scoring import Scoring, get_parameter_type
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.logger_config import KMOLogger
 
@@ -241,36 +241,33 @@ class Linear(CoreRun):
     def calculate_dstep(self,
                         uc: float,
                         param: str,
-                        side: int) -> float:
-        """Calculate the size of the derivative
-        step depending on the type of parameter.
+                        side: int,
+                        value: float) -> float:
+        """Apply the derivative step to a parameter value depending
+        on the type of parameter.
 
         Args:
             uc (float): value of the uncertainty for this parameter
             param (str): full name of the parameter
             side (int): side of the derivative
+            value (float): current value of the parameter
 
         Returns:
-            float: derivative step
+            float: the perturbed value
         """
-        # Recognise type of parameter
-        for ptype in Ptype:
-            if ptype.value in param:
-                break
         if self.pert is None:
             raise RuntimeError(
                 'Cannot calculate derivative step without a perturbator.'
             )
+        ptype = get_parameter_type(param)
+        if ptype.value in Pclass.MULTIPLICATIVE.value:
+            factor: float = 1 + (uc - 1) * self.lin_fact
+            return value * factor if side == 1 else value / factor
         scale: float = self.pert.get_scale(
                 ptype=ptype.value,
                 param=param
             )
-        # Assymetric derivative for lognormal distribution
-        if self.pert.distribs[ptype] == Distrib.LOGNORMAL and side == -1:
-            dstep: float = scale/uc
-        else:
-            dstep = scale
-        return dstep * self.lin_fact
+        return value + scale * self.lin_fact * side
 
     def prepare_models(self,
                        models: list[Model]) -> list[Model]:
@@ -310,14 +307,15 @@ class Linear(CoreRun):
                 mdl_id += 1
                 # Get the uncertainty of the parameter
                 uc: float = self.sop_tpl.uncertainties[key]
-                dstep: float = self.calculate_dstep(
+                new_value: float = self.calculate_dstep(
                     uc=uc,
                     param=key,
-                    side=side
+                    side=side,
+                    value=pn[key]
                 )
                 new_sop = SOP.from_db_row(
                     sop_tpl=self.sop_tpl,
-                    row=[v+(dstep*side) if k == key else v
+                    row=[new_value if k == key else v
                          for k, v in pn.items()])
                 new_models.append(
                     Model(
