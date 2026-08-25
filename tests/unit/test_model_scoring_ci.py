@@ -130,7 +130,16 @@ def test_uncertainty_scale_scales_percent_and_multiplicative_types() -> None:
     )
 
     assert scale_sigma == pytest.approx(1.0)
-    assert scale_if == pytest.approx(20.0)
+    assert scale_if == pytest.approx(np.log(1.2))
+
+    # Multiplicative scale depends only on the uncertainty (ln), not on the
+    # reference value: a different reference value gives the same scale.
+    scale_if_other_ref = get_parameter_uncertainty_scale(
+        reference_values={"TS__if": 5.0},
+        reference_uncertainties={"TS__if": 1.2},
+        param="TS__if",
+    )
+    assert scale_if_other_ref == pytest.approx(np.log(1.2))
 
 
 def test_scoring_keeps_finite_total_when_active_p_is_empty() -> None:
@@ -169,3 +178,74 @@ def test_scoring_keeps_finite_total_when_active_p_is_empty() -> None:
     assert mdl.theory_score == pytest.approx(1.0)
     assert np.isfinite(mdl.score)
     assert mdl.score == pytest.approx(0.5)
+
+
+def test_multiplicative_theory_score_is_factor_symmetric() -> None:
+    reference = _sop(
+        parameters={"TS__if": 100.0},
+        uncertainties={"TS__if": 1.2},
+        scores={},
+    )
+    settings = {"active_p": ["TS__if"]}
+    sf = Scoring(settings=settings, initial_SOP=reference)
+
+    up_sop = _sop(
+        parameters={"TS__if": 100.0 * 1.5},
+        uncertainties={"TS__if": 1.2},
+        scores={},
+    )
+    down_sop = _sop(
+        parameters={"TS__if": 100.0 / 1.5},
+        uncertainties={"TS__if": 1.2},
+        scores={},
+    )
+
+    up_score = sf.score_theory(cast(Any, up_sop))
+    down_score = sf.score_theory(cast(Any, down_sop))
+
+    expected = (np.log(1.5) / np.log(1.2)) ** 2
+    assert up_score == pytest.approx(down_score)
+    assert up_score == pytest.approx(expected)
+
+
+def test_multiplicative_theory_score_unit_case() -> None:
+    reference = _sop(
+        parameters={"TS__if": 1.0},
+        uncertainties={"TS__if": 2.0},
+        scores={},
+    )
+    settings = {"active_p": ["TS__if"]}
+    sf = Scoring(settings=settings, initial_SOP=reference)
+
+    candidate = _sop(
+        parameters={"TS__if": 2.0},
+        uncertainties={"TS__if": 2.0},
+        scores={},
+    )
+
+    assert sf.score_theory(cast(Any, candidate)) == pytest.approx(1.0)
+
+
+def test_multiplicative_uncertainty_one_raises() -> None:
+    with pytest.raises(ValueError):
+        get_parameter_uncertainty_scale(
+            reference_values={"TS__if": 100.0},
+            reference_uncertainties={"TS__if": 1.0},
+            param="TS__if",
+        )
+
+
+def test_additive_and_percent_scales_unchanged() -> None:
+    scale_additive = get_parameter_uncertainty_scale(
+        reference_values={"A__we": 10.0},
+        reference_uncertainties={"A__we": 2.0},
+        param="A__we",
+    )
+    scale_percent = get_parameter_uncertainty_scale(
+        reference_values={"__sigma0": 10.0},
+        reference_uncertainties={"__sigma0": 0.1},
+        param="__sigma0",
+    )
+
+    assert scale_additive == pytest.approx(2.0)
+    assert scale_percent == pytest.approx(1.0)

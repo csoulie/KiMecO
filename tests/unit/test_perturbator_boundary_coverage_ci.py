@@ -46,9 +46,15 @@ def _make_pert(std_overrides: dict[str, Any],
                value: float) -> Perturbator:
     """Build a real Perturbator with a fake i_sop exposing exactly one param.
 
-    ``uncertainty`` feeds ``get_scale`` (via ``i_sop.uncertainties``); the
-    matching ``std_<ptype>`` in ``std_overrides`` feeds ``get_boundaries``.
-    Keeping them equal is what makes +/-max_std*sigma land on the boundary.
+    ``uncertainty`` feeds ``get_scale`` (via ``i_sop.uncertainties``). Since the
+    boundary fix, ``get_boundaries`` ALSO reads ``i_sop.uncertainties[param]``
+    whenever a ``param`` is supplied, falling back to ``settings['std_<ptype>']``
+    (from ``std_overrides``) when ``param`` is ``None`` or absent from the dict.
+
+    The numeric cases below keep ``uncertainty == std`` and call
+    ``get_boundaries`` positionally (no ``param`` -> the global-std fallback), so
+    both the boundary and the ``get_rng`` sampling paths resolve to the same
+    sigma and the +/-max_std*sigma identities still land exactly on the boundary.
     """
     settings: dict[str, Any] = {"active_p": []}
     settings.update(std_overrides)
@@ -348,3 +354,231 @@ def test_get_mean_sigma_removed() -> None:
     """Dead get_mean_sigma was removed from the Perturbator surface."""
     pert = _make_pert({"max_std": 3, "std_if": 1.2}, 1.2, 1.0)
     assert not hasattr(pert, "get_mean_sigma")
+
+
+# ===========================================================================
+# Group 5 -- Parameter-specific uncertainty overrides in get_boundaries.
+#
+# get_boundaries(..., param=P) resolves the sigma from
+# i_sop.uncertainties[P] when present, else falls back to
+# settings['std_<ptype>']. Here _make_pert seeds uncertainties[PARAM] with the
+# OVERRIDE, and std_overrides carries the (different) GLOBAL std, so the two
+# code paths diverge and can be compared head to head.
+# ===========================================================================
+
+def test_specific_std_widens_additive_bounds() -> None:
+    """we: an override (2.0) wider than the global std (1.0) widens the band."""
+    pert = _make_pert({"max_std": 3, "std_we": 1.0}, 2.0, 100.0)
+    lo_o, hi_o = pert.get_boundaries(
+        ptype=Ptype.WE.value, i_val=100.0, param=PARAM)
+    lo_g, hi_g = pert.get_boundaries(ptype=Ptype.WE.value, i_val=100.0)
+    # Override band = 100 +/- 2.0*3; global band = 100 +/- 1.0*3.
+    assert (lo_o, hi_o) == pytest.approx((100.0 - 6.0, 100.0 + 6.0))
+    assert (lo_g, hi_g) == pytest.approx((100.0 - 3.0, 100.0 + 3.0))
+    assert (hi_o - lo_o) > (hi_g - lo_g)
+
+
+def test_specific_std_narrows_additive_bounds() -> None:
+    """be: an override (0.5) below the global std (1.0) narrows the band."""
+    pert = _make_pert({"max_std": 3, "std_be": 1.0}, 0.5, 50.0)
+    lo_o, hi_o = pert.get_boundaries(
+        ptype=Ptype.BE.value, i_val=50.0, param=PARAM)
+    lo_g, hi_g = pert.get_boundaries(ptype=Ptype.BE.value, i_val=50.0)
+    assert (lo_o, hi_o) == pytest.approx((50.0 - 1.5, 50.0 + 1.5))
+    assert (hi_o - lo_o) < (hi_g - lo_g)
+
+
+def test_specific_std_widens_percent_bounds() -> None:
+    """hrs: percent override (0.3 vs 0.1) widens the value-scaled band."""
+    i_val = 800.0
+    pert = _make_pert({"max_std": 3, "std_hrs": 0.1}, 0.3, i_val)
+    lo_o, hi_o = pert.get_boundaries(
+        ptype=Ptype.HRS.value, i_val=i_val, param=PARAM)
+    lo_g, hi_g = pert.get_boundaries(ptype=Ptype.HRS.value, i_val=i_val)
+    assert (lo_o, hi_o) == pytest.approx(
+        (i_val - i_val * 0.3 * 3, i_val + i_val * 0.3 * 3))
+    assert (hi_o - lo_o) > (hi_g - lo_g)
+
+
+def test_specific_std_scales_multiplicative_bounds() -> None:
+    """mrc: multiplicative override (1.5 vs 1.2) keeps log symmetry lo*hi==i^2."""
+    i_val = 500.0
+    pert = _make_pert({"max_std": 3, "std_mrc": 1.2}, 1.5, i_val)
+    lo_o, hi_o = pert.get_boundaries(
+        ptype=Ptype.MRC.value, i_val=i_val, param=PARAM)
+    factor = 1 + (1.5 - 1) * 3  # = 2.5, using the OVERRIDE not the global 1.2.
+    assert lo_o == pytest.approx(i_val / factor)
+    assert hi_o == pytest.approx(i_val * factor)
+    assert lo_o * hi_o == pytest.approx(i_val ** 2)
+    # Distinct from the global (1.2 -> factor 1.6) band.
+    lo_g, hi_g = pert.get_boundaries(ptype=Ptype.MRC.value, i_val=i_val)
+    assert (hi_o - lo_o) > (hi_g - lo_g)
+
+
+@pytest.mark.parametrize(
+    "ptype,std_key,std_val,i_val",
+    [
+        (Ptype.WE.value, "std_we", 1.0, 100.0),
+        (Ptype.HRS.value, "std_hrs", 0.1, 800.0),
+        (Ptype.MRC.value, "std_mrc", 1.2, 500.0),
+    ],
+    ids=["we", "hrs", "mrc"])
+def test_no_override_falls_back_to_global(ptype, std_key, std_val,
+                                          i_val) -> None:
+    """When uncertainty == global std, the param path matches the global path."""
+    pert = _make_pert({"max_std": 3, std_key: std_val}, std_val, i_val)
+    with_param = pert.get_boundaries(ptype=ptype, i_val=i_val, param=PARAM)
+    global_path = pert.get_boundaries(ptype=ptype, i_val=i_val)
+    assert with_param == pytest.approx(global_path)
+
+
+def test_param_none_uses_global() -> None:
+    """param=None ignores i_sop.uncertainties and uses settings['std_<ptype>']."""
+    pert = _make_pert({"max_std": 3, "std_we": 1.0}, 9.0, 100.0)
+    none_path = pert.get_boundaries(
+        ptype=Ptype.WE.value, i_val=100.0, param=None)
+    # Explicit global expectation (std_we = 1.0), NOT the 9.0 override.
+    assert none_path == pytest.approx((100.0 - 3.0, 100.0 + 3.0))
+
+
+def test_param_absent_from_uncertainties_falls_back() -> None:
+    """An unknown param key (not in uncertainties) falls back to the global std."""
+    pert = _make_pert({"max_std": 3, "std_we": 1.0}, 9.0, 100.0)
+    # 'ghost' is absent from i_sop.uncertainties (which only holds PARAM).
+    ghost = pert.get_boundaries(
+        ptype=Ptype.WE.value, i_val=100.0, param="ghost")
+    assert ghost == pytest.approx((100.0 - 3.0, 100.0 + 3.0))
+
+
+def test_within_boundaries_forwards_param() -> None:
+    """within_boundaries forwards param: a value inside the widened band but
+    outside the global band is accepted only when param is supplied."""
+    pert = _make_pert({"max_std": 3, "std_we": 1.0}, 3.0, 100.0)
+    # Global band = (97, 103); widened override band = (91, 109).
+    value = 105.0
+    assert pert.within_boundaries(
+        perturbed_val=value, ptype=Ptype.WE.value, initial_val=100.0,
+        param=PARAM) is True
+    assert pert.within_boundaries(
+        perturbed_val=value, ptype=Ptype.WE.value, initial_val=100.0) is False
+
+
+def test_get_rng_uniform_honors_param_bounds() -> None:
+    """get_rng(UNIFORM) samples the param-widened band: draws exceed the
+    global upper bound (impossible without forwarding param)."""
+    pert = _make_pert({"max_std": 3, "std_we": 1.0}, 3.0, 100.0)
+    global_hi = pert.get_boundaries(ptype=Ptype.WE.value, i_val=100.0)[1]
+    widened_hi = pert.get_boundaries(
+        ptype=Ptype.WE.value, i_val=100.0, param=PARAM)[1]
+    np.random.seed(SEED)
+    draws = np.array([
+        pert.get_rng(ptype=Ptype.WE.value, i_val=100.0, c_val=100.0,
+                     param=PARAM, distrib=Distrib.UNIFORM)
+        for _ in range(N)])
+    assert draws.max() > global_hi
+    assert draws.max() <= widened_hi
+    assert draws.min() >= pert.get_boundaries(
+        ptype=Ptype.WE.value, i_val=100.0, param=PARAM)[0]
+
+
+# ===========================================================================
+# Group 6 -- Seed rescaling: the out-of-bounds "seed" value each perturb_*
+#            method uses to force at least one get_rng draw must itself be
+#            rescaled by the parameter-specific uncertainty.
+# ===========================================================================
+
+def _instrument(pert: Perturbator, in_bounds: float):
+    """Record first within_boundaries perturbed_val + count get_rng calls.
+
+    get_rng is stubbed to return an in-bounds value so the seeding loop exits
+    after exactly one draw, leaving the initial seed observable in wb[0].
+    """
+    wb: list[float] = []
+    calls = {"rng": 0}
+    orig_wb = pert.within_boundaries
+
+    def spy_wb(**kw: Any) -> bool:
+        wb.append(kw["perturbed_val"])
+        return orig_wb(**kw)
+
+    def stub_rng(**kw: Any) -> float:
+        calls["rng"] += 1
+        return in_bounds
+
+    pert.within_boundaries = spy_wb  # type: ignore[method-assign]
+    pert.get_rng = stub_rng          # type: ignore[method-assign]
+    return wb, calls
+
+
+@pytest.mark.parametrize("glob,spec", [(1.0, 5.0), (1.0, 0.5)],
+                         ids=["widened", "narrowed"])
+def test_perturb_energy_seed_rescaled_to_specific_std(glob, spec) -> None:
+    """perturb_energy seeds E0 - 3*max_std*sigma using the override sigma."""
+    e0 = 100.0
+    max_std = 3
+    param = f"LEFT__{Ptype.WE.value}"
+    pert = _make_pert({"max_std": max_std, f"std_{Ptype.WE.value}": glob},
+                      spec, e0)
+    pert.select = [param]
+    pert.i_sop.items = {"LEFT": SimpleNamespace(energy=e0)}
+    pert.i_sop.uncertainties = {param: spec}
+    pert.settings["distrib_we"] = Distrib.NORMAL
+    item = SimpleNamespace(name="LEFT", pert_e=True, energy=e0, _energy=e0)
+    wb, calls = _instrument(pert, in_bounds=e0)
+
+    pert.perturb_energy(item=item)
+
+    seed = wb[0]
+    assert seed == pytest.approx(e0 - 3 * max_std * spec)
+    lo = min(pert.get_boundaries(
+        ptype=Ptype.WE.value, i_val=e0, param=param))
+    assert seed < lo
+    assert calls["rng"] >= 1
+
+
+def test_perturb_hindered_rotors_seed_rescaled() -> None:
+    """perturb_hindered_rotors seeds 1 - 3*max_std*sigma using override sigma."""
+    glob, spec, max_std = 0.1, 0.3, 3
+    param = f"W__{Ptype.HRS.value}0"
+    pert = _make_pert({"max_std": max_std, f"std_{Ptype.HRS.value}": glob},
+                      spec, 1.0)
+    pert.select = [param]
+    pert.i_sop.uncertainties = {param: spec}
+    pert.settings["distrib_hrs"] = Distrib.NORMAL
+    rot = SimpleNamespace(pert=0.0)
+    well = SimpleNamespace(name="W", h_rotors=[rot])
+    wb, calls = _instrument(pert, in_bounds=1.0)
+
+    pert.perturb_hindered_rotors(well=well)
+
+    seed = wb[0]
+    assert seed == pytest.approx(1 - 3 * max_std * spec)
+    lo = min(pert.get_boundaries(
+        ptype=Ptype.HRS.value, i_val=1.0, param=param))
+    assert seed < lo
+    assert calls["rng"] >= 1
+    assert rot.pert == pytest.approx(1.0)
+
+
+def test_perturb_multi_rotors_seed_rescaled() -> None:
+    """perturb_multi_rotors seeds 1 - 3*max_std*sigma using override sigma."""
+    glob, spec, max_std = 1.2, 1.5, 3
+    param = f"W__{Ptype.MRC.value}0"
+    pert = _make_pert({"max_std": max_std, f"std_{Ptype.MRC.value}": glob},
+                      spec, 1.0)
+    pert.select = [param]
+    pert.i_sop.uncertainties = {param: spec}
+    pert.settings["distrib_mrc"] = Distrib.LOGNORMAL
+    rot = SimpleNamespace(sfc=0.0)
+    well = SimpleNamespace(name="W", m_rotors=[rot])
+    wb, calls = _instrument(pert, in_bounds=1.0)
+
+    pert.perturb_multi_rotors(well=well)
+
+    seed = wb[0]
+    assert seed == pytest.approx(1 - 3 * max_std * spec)
+    lo = min(pert.get_boundaries(
+        ptype=Ptype.MRC.value, i_val=1.0, param=param))
+    assert seed < lo
+    assert calls["rng"] >= 1
+    assert rot.sfc == pytest.approx(1.0)

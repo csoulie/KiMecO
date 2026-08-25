@@ -246,7 +246,8 @@ class SOPSection(Section):
             return [0, init_val]
         return list(self.pert.get_boundaries(
             ptype=ptype.value,
-            i_val=init_val))
+            i_val=init_val,
+            param=col))
 
     def get_plot_options(self,
                          col: str,

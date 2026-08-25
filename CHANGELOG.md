@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.3] - 2026-08-24
+
+### Fixed
+- Per-parameter `specific_std` overrides now govern the perturbation **boundaries** (the trusted range), not only the sampling scale and scoring weight.
+- Theory-score contribution for multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) is now computed in log space as `(ln(value / reference) / ln(uncertainty))**2`, replacing the previous linear distance/scale. The penalty is now symmetric under a factor `f` versus its inverse `1/f` and consistent with the perturbator's log-normal (log-space) sampling of those parameters. Additive and percentage parameters are unchanged. This is the scoring-side counterpart of the log-space perturbation correction shipped in [1.1.2].
 
 ### Added
 - Optional automech-driven two-pass MESS (WellExtension) path in the rate-coefficient pipeline, gated by a new boolean keyword `use_automech` (default `false`). When `false`, the existing single-pass MESS behavior is unchanged (KiMecO renders `{name}P{slot:02d}.inp` and runs `mess ...inp`). When `true`, KiMecO instead emits a self-contained per-job Python driver `{name}P{slot:02d}.py` that embeds the SOP's PES data inline (reads no database at runtime, avoiding concurrency errors), drives automech's stateless `mess_io` API to run MESS pass 1, preserves the pass-1 output as `_{name}P{slot:02d}.out`, calls `mess_io.well_lumped_input_file` to derive the WellExtension caps, then runs MESS pass 2 to produce the final `{name}P{slot:02d}.out`. The emitted script honors postprocessing partial re-runs (restricted `(P, T)` sub-grid) and reads external rotor and barrierless rotd/pp files from disk at runtime.
@@ -105,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.3]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandialabs/KiMecO/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.1
 [1.1.0]: https://github.com/sandialabs/KiMecO/compare/v1.0.4...v1.1.0
@@ -113,4 +118,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandialabs/KiMecO/releases/tag/v1.0.0
-[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.3...HEAD

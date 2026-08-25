@@ -72,12 +72,15 @@ class Perturbator:
 
     def get_boundaries(self,
                        ptype: str,
-                       i_val: float) -> tuple[float, float]:
+                       i_val: float,
+                       param: str | None = None) -> tuple[float, float]:
         """Get the appropriate boundaries for a given parameter.
 
         Args:
             ptype (str): type of parameter
             i_val (float): initial value before perturbation
+            param (str | None): parameter's name, used to resolve a
+                parameter-specific uncertainty when available
 
         Raises:
             NotImplementedError: unknown ptype
@@ -88,18 +91,20 @@ class Perturbator:
         mult = self.settings['max_std']
         bounds: tuple[float, float]
         std_p: str = 'std_' + ptype
+        resolved_std = self.i_sop.uncertainties.get(param,
+                                                    self.settings[std_p])
         if ptype in self.additive:
-            bounds = (i_val - self.settings[std_p] * mult,
-                      i_val + self.settings[std_p] * mult)
+            bounds = (i_val - resolved_std * mult,
+                      i_val + resolved_std * mult)
         elif ptype in self.percent:
             bounds = (i_val - i_val
-                      * self.settings[std_p] * mult,
+                      * resolved_std * mult,
                       i_val + i_val
-                      * self.settings[std_p] * mult)
+                      * resolved_std * mult)
         elif ptype in self.multiplicative:
             bounds = (
-                i_val / (1 + (self.settings[std_p]-1) * mult),
-                i_val * (1 + (self.settings[std_p]-1) * mult))
+                i_val / (1 + (resolved_std-1) * mult),
+                i_val * (1 + (resolved_std-1) * mult))
         else:
             raise NotImplementedError('Parameter not parametrised.')
         if ptype in self.zero_bound and min(bounds) < 0:
@@ -111,7 +116,8 @@ class Perturbator:
     def within_boundaries(self,
                           perturbed_val: float,
                           ptype: str,
-                          initial_val: float
+                          initial_val: float,
+                          param: str | None = None
                           ) -> bool:
         """Check wether a perturbed parameter is within
         the trusted space from the initial value.
@@ -120,13 +126,16 @@ class Perturbator:
             perturbed_val (float): trial perturbed value
             ptype (str): type of parameter to obtain the boundaries from
             initial_val (float): value in the initial set of parameter
+            param (str | None): parameter's name, forwarded to resolve a
+                parameter-specific uncertainty when available
 
         Returns:
             bool: Wether or not within boundaries.
         """
         boundaries: tuple[float, float] = self.get_boundaries(
             ptype=ptype,
-            i_val=initial_val)
+            i_val=initial_val,
+            param=param)
         if perturbed_val > min(boundaries) and\
            perturbed_val < max(boundaries):
             return True
@@ -180,12 +189,14 @@ class Perturbator:
         if distrib == Distrib.UNIFORM:
             bounds: tuple[float, float] = self.get_boundaries(
                 ptype=ptype,
-                i_val=i_val)
+                i_val=i_val,
+                param=param)
             return float(np.random.uniform(low=bounds[0], high=bounds[1]))
         elif distrib == Distrib.LOGUNIFORM:
             bounds = self.get_boundaries(
                 ptype=ptype,
-                i_val=i_val)
+                i_val=i_val,
+                param=param)
             return float(np.exp(np.random.uniform(low=np.log(bounds[0]),
                                                   high=np.log(bounds[1]))))
         elif distrib == Distrib.NORMAL:
@@ -199,7 +210,8 @@ class Perturbator:
             # This shift is simply for negative values
             bounds = self.get_boundaries(
                 ptype=ptype,
-                i_val=i_val)
+                i_val=i_val,
+                param=param)
             loc: float = c_val
             scale: float = self.get_scale(param=param,
                                           ptype=ptype)
@@ -224,7 +236,8 @@ class Perturbator:
             while try_fact < 0 or\
                 not self.within_boundaries(perturbed_val=try_fact,
                                            ptype=Ptype.ETF.value,
-                                           initial_val=self.i_sop.factor):
+                                           initial_val=self.i_sop.factor,
+                                           param=dbs+Ptype.ETF.value):
                 # Truncate distribution at 0 to have positive factor
                 try_fact: float = self.get_rng(
                     ptype=Ptype.ETF.value,
@@ -239,7 +252,8 @@ class Perturbator:
             while try_pow < 0 or\
                 not self.within_boundaries(perturbed_val=try_pow,
                                            ptype=Ptype.ETP.value,
-                                           initial_val=self.i_sop.power):
+                                           initial_val=self.i_sop.power,
+                                           param=dbs+Ptype.ETP.value):
                 # Truncate distribution at 0 to have positive power
                 try_pow: float = self.get_rng(
                     ptype=Ptype.ETP.value,
@@ -256,7 +270,8 @@ class Perturbator:
                     not self.within_boundaries(
                         perturbed_val=try_sig,
                         ptype=Ptype.SIG.value,
-                        initial_val=self.i_sop.sigmas[i]):
+                        initial_val=self.i_sop.sigmas[i],
+                        param=dbs+Ptype.SIG.value+f'{i}'):
                     try_sig: float = self.get_rng(
                         ptype=Ptype.SIG.value,
                         i_val=self.i_sop.sigmas[i],
@@ -272,7 +287,8 @@ class Perturbator:
                     not self.within_boundaries(
                         perturbed_val=try_eps,
                         ptype=Ptype.EPSI.value,
-                        initial_val=self.i_sop.epsilons[i]):
+                        initial_val=self.i_sop.epsilons[i],
+                        param=dbs+Ptype.EPSI.value+f'{i}'):
                     try_eps: float = self.get_rng(
                         ptype=Ptype.EPSI.value,
                         i_val=self.i_sop.epsilons[i],
@@ -332,11 +348,13 @@ class Perturbator:
             # Set trial energy out of the boundaries
             try_e: float = self.i_sop.items[item.name].energy\
                 - (3*self.settings['max_std']) * \
-                self.settings[f'std_{Ptype.WE.value}']
+                self.i_sop.uncertainties.get(
+                    param, self.settings[f'std_{Ptype.WE.value}'])
             while not self.within_boundaries(
                   perturbed_val=try_e,
                   ptype=Ptype.WE.value,
-                  initial_val=self.i_sop.items[item.name].energy):
+                  initial_val=self.i_sop.items[item.name].energy,
+                  param=param):
                 try_e = self.get_rng(
                     ptype=Ptype.WE.value,
                     i_val=self.i_sop.items[item.name].energy,
@@ -364,7 +382,8 @@ class Perturbator:
                    not self.within_boundaries(
                    perturbed_val=try_e,
                    ptype=Ptype.BE.value,
-                   initial_val=self.i_sop.items[bar.name].energy)):
+                   initial_val=self.i_sop.items[bar.name].energy,
+                   param=param)):
                 try_e = self.get_rng(
                     ptype=Ptype.BE.value,
                     i_val=self.i_sop.items[bar.name].energy,
@@ -400,7 +419,8 @@ class Perturbator:
                     not self.within_boundaries(
                         perturbed_val=try_bfc,
                         ptype=Ptype.BFC.value,
-                        initial_val=1):
+                        initial_val=1,
+                        param=param):
                     try_bfc: float = self.get_rng(
                         ptype=Ptype.BFC.value,
                         i_val=i_well.bfc,
@@ -427,7 +447,8 @@ class Perturbator:
                         not self.within_boundaries(
                             perturbed_val=try_ifc,
                             ptype=Ptype.IFC.value,
-                            initial_val=1):
+                            initial_val=1,
+                            param=param):
                         try_ifc: float = self.get_rng(
                             ptype=Ptype.IFC.value,
                             i_val=i_well.ifc[idx],
@@ -454,11 +475,13 @@ class Perturbator:
                 # Set trial rotor perturbation out of the boundaries
                 try_r: float = 1 -\
                     (3*self.settings['max_std']) *\
-                    self.settings[f'std_{Ptype.HRS.value}']
+                    self.i_sop.uncertainties.get(
+                        param, self.settings[f'std_{Ptype.HRS.value}'])
                 while not self.within_boundaries(
                       perturbed_val=try_r,
                       ptype=Ptype.HRS.value,
-                      initial_val=1):
+                      initial_val=1,
+                      param=param):
                     try_r = self.get_rng(
                         ptype=Ptype.HRS.value,
                         i_val=1.0,
@@ -484,11 +507,13 @@ class Perturbator:
                 # Set trial rotor perturbation out of the boundaries
                 try_r: float = 1 -\
                     (3*self.settings['max_std']) *\
-                    self.settings[f'std_{Ptype.MRC.value}']
+                    self.i_sop.uncertainties.get(
+                        param, self.settings[f'std_{Ptype.MRC.value}'])
                 while not self.within_boundaries(
                       perturbed_val=try_r,
                       ptype=Ptype.MRC.value,
-                      initial_val=1):
+                      initial_val=1,
+                      param=param):
                     try_r = self.get_rng(
                         ptype=Ptype.MRC.value,
                         i_val=1.0,
@@ -518,7 +543,8 @@ class Perturbator:
             while try_if < 0 or not self.within_boundaries(
                     perturbed_val=try_if,
                     ptype=Ptype.IF.value,
-                    initial_val=i_item.ifreq):
+                    initial_val=i_item.ifreq,
+                    param=param):
                 try_if = self.get_rng(
                         ptype=Ptype.IF.value,
                         i_val=i_item.ifreq,
@@ -547,7 +573,8 @@ class Perturbator:
                    not self.within_boundaries(
                     perturbed_val=try_sfc,
                     ptype=Ptype.SFC.value,
-                    initial_val=i_item.sfc)):
+                    initial_val=i_item.sfc,
+                    param=param)):
                 try_sfc = self.get_rng(
                         ptype=Ptype.SFC.value,
                         i_val=i_item.sfc,

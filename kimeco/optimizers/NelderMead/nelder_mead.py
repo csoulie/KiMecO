@@ -519,7 +519,8 @@ class NelderMead:
                 break
         return self.pert.get_boundaries(
             ptype=pt.value,
-            i_val=self.f_mdl.sop.parameters_names[parameter]
+            i_val=self.f_mdl.sop.parameters_names[parameter],
+            param=parameter
             )
 
     def print_stats(self,
