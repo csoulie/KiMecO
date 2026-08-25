@@ -321,8 +321,9 @@ class SpyPert:
         self.raise_not_impl = raise_not_impl
         self.calls: list[dict[str, Any]] = []
 
-    def get_boundaries(self, ptype: str, i_val: float) -> tuple[float, float]:
-        self.calls.append({'ptype': ptype, 'i_val': i_val})
+    def get_boundaries(self, ptype: str, i_val: float,
+                       param: str | None = None) -> tuple[float, float]:
+        self.calls.append({'ptype': ptype, 'i_val': i_val, 'param': param})
         if self.raise_not_impl:
             raise NotImplementedError('Parameter not parametrised.')
         return self.result
@@ -364,10 +365,66 @@ def test_get_boundaries_perturbed_column_still_delegates() -> None:
     bounds = sec.get_boundaries(WE_COL)
 
     # Non-score behaviour is unchanged: delegated to the perturbator with the
-    # right ptype/init value, and the tuple is passed through as a list.
-    assert pert.calls == [{'ptype': Ptype.WE.value, 'i_val': 111.0}]
+    # right ptype/init value, and the tuple is passed through as a list. The
+    # full column name is forwarded as ``param`` for per-parameter uncertainty.
+    assert pert.calls == [
+        {'ptype': Ptype.WE.value, 'i_val': 111.0, 'param': WE_COL}]
     assert bounds == [100.0, 122.0]
     assert isinstance(bounds, list)
+
+
+def test_get_boundaries_forwards_full_col_key_as_param() -> None:
+    columns = [WE_COL, SCORE_COL]
+    init_vals = [999.0, 111.0, 222.0]
+    pert = SpyPert(result=(100.0, 122.0))
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    sec.get_boundaries(WE_COL)
+
+    # param must be the FULL column key (e.g. "LEFT__we"), not the split short
+    # ptype token ("we"); the perturbator keys i_sop.uncertainties by full name.
+    assert len(pert.calls) == 1
+    assert pert.calls[0]['param'] == WE_COL
+    assert pert.calls[0]['param'] != Ptype.WE.value
+
+
+def test_get_boundaries_score_path_unaffected_by_param() -> None:
+    columns = [WE_COL, SCORE_COL]
+    init_vals = [999.0, 111.0, 222.0]
+    pert = SpyPert(raise_not_impl=True)
+    sec = _make_boundaries_section(columns, init_vals, pert)
+
+    bounds = sec.get_boundaries(SCORE_COL)
+
+    # Score short-circuits before any perturbator call, so param forwarding is
+    # irrelevant and the raising perturbator is never consulted.
+    assert bounds == [0.0, 222.0]
+    assert pert.calls == []
+
+
+def test_get_boundaries_reflects_specific_std_override() -> None:
+    # Real Perturbator so the param-specific uncertainty flows end to end.
+    from kimeco.Perturbators.perturbator import Perturbator
+
+    columns = [WE_COL]
+    init_vals = [0.0, 100.0]  # WE_COL init value = init_vals[0 + 1] = 100.0.
+    settings = {'active_p': [], 'max_std': 3, f'std_{Ptype.WE.value}': 1.0}
+    klog = SimpleNamespace(
+        info=lambda *a, **k: None,
+        warning=lambda *a, **k: None,
+        debug=lambda *a, **k: None)
+    pert = Perturbator(settings, SimpleNamespace(), klog)
+    pert.i_sop = cast(Any, SimpleNamespace(
+        uncertainties={WE_COL: 5.0}, parameters_names={WE_COL: 100.0}))
+
+    sec = _make_boundaries_section(columns, init_vals, pert)
+    bounds = sec.get_boundaries(WE_COL)
+
+    # Override (5.0) widens the band vs the global std (1.0): 100 +/- 5*3.
+    assert bounds == pytest.approx([100.0 - 15.0, 100.0 + 15.0])
+    # And it is strictly wider than the global-std band (100 +/- 1*3).
+    global_band = pert.get_boundaries(ptype=Ptype.WE.value, i_val=100.0)
+    assert (bounds[1] - bounds[0]) > (global_band[1] - global_band[0])
 
 
 def test_make_figure_over_score_skips_brown_boundary_vlines() -> None:

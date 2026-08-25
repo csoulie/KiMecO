@@ -10,7 +10,7 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 | freq_mode | "batch" | Frequency perturbation mode. Possible values: "batch" or "individual". Individual mode has not been thoroughly tested. |
 | weight_theory | 1.0 | Raw theory contribution weight; normalized at runtime with weight_experiments. |
 | weight_experiments | 1.0 | Raw experiment contribution weight; normalized at runtime with weight_theory. |
-| specific_std | {} | Per-parameter override map for standard deviations. |
+| specific_std | {} | Per-parameter override map for standard deviations. An entry overrides the global `std_<ptype>` for that parameter and governs the sampling scale, the scoring weight, **and** the perturbation boundaries (trusted range): a larger value widens the accepted bounds, a smaller one tightens them. Parameters without an entry fall back to the global `std_<ptype>`. |
 
 ## 4.2 Standard deviations (std_*)
 

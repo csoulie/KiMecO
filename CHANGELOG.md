@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.3] - 2026-08-24
 
 ### Fixed
+- Per-parameter `specific_std` overrides now govern the perturbation **boundaries** (the trusted range), not only the sampling scale and scoring weight.
 - Theory-score contribution for multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) is now computed in log space as `(ln(value / reference) / ln(uncertainty))**2`, replacing the previous linear distance/scale. The penalty is now symmetric under a factor `f` versus its inverse `1/f` and consistent with the perturbator's log-normal (log-space) sampling of those parameters. Additive and percentage parameters are unchanged. This is the scoring-side counterpart of the log-space perturbation correction shipped in [1.1.2].
 
 ## [1.1.2] - 2026-08-24
