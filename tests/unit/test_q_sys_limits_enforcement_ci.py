@@ -21,6 +21,7 @@ def _settings(tmp_path: Path, **overrides: Any) -> dict[str, Any]:
         "mem_sim": 500,
         "n_exp": 1,
         "exclude_nodes": "",
+        "q_name": "day-long-cpu",
         "max_user_jobs": 128,
         "scratch_base": str(tmp_path) + "/",
         "project_name": "GAME_TEST",

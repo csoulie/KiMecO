@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New user-settable input keyword `q_name` (default `day-long-cpu`) exposing the queuing system's queue/partition as a free-form string passed to SLURM via `#SBATCH -p`. Registered in `default_settings`, read by `QueueingSystem`, and surfaced in the launcher GUI (Resources section, with save/load round-trip) and the dashboard metadata.
+
 ## [1.1.4] - 2026-08-25
 
 ### Fixed

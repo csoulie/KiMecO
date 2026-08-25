@@ -498,6 +498,7 @@ This section controls per-job SLURM resources and global scheduling limits.
 | max_jobs | 600 | Maximum submitted jobs for current KiMecO instance. |
 | max_user_jobs | 1500 | Maximum submitted jobs for the current user. |
 | exclude_nodes | "" | Comma-separated SLURM nodes to exclude. |
+| q_name | day-long-cpu | SLURM partition/queue name passed to #SBATCH -p. |
 
 
 ## Additional Global Keywords

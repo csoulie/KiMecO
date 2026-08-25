@@ -64,6 +64,24 @@ def create_resources_section() -> html.Div:
                     className="form-text text-muted",
                 ),
             ], className="col-md-6"),
+            html.Div([
+                html.Label(
+                    "Partition (queue)",
+                    className="form-label fw-semibold"
+                ),
+                dcc.Input(
+                    id="res-q-name",
+                    type="text",
+                    value=ds["q_name"],
+                    placeholder="e.g. day-long-cpu",
+                    debounce=True,
+                    className="form-control form-control-sm",
+                ),
+                html.Small(
+                    "Passed to #SBATCH -p (SLURM partition).",
+                    className="form-text text-muted",
+                ),
+            ], className="col-md-6"),
         ),
 
         html.Hr(),
@@ -211,6 +229,7 @@ def _default_config() -> dict:
         "max_jobs": ds["max_jobs"],
         "max_user_jobs": ds["max_user_jobs"],
         "exclude_nodes": ds["exclude_nodes"],
+        "q_name": ds["q_name"],
     }
 
 
@@ -227,6 +246,7 @@ def _default_config() -> dict:
     Input("res-max-jobs", "value"),
     Input("res-max-user-jobs", "value"),
     Input("res-exclude-nodes", "value"),
+    Input("res-q-name", "value"),
     State("resources-config-store", "data"),
 )
 def update_resources_config(
@@ -239,6 +259,7 @@ def update_resources_config(
     max_jobs: Any,
     max_user_jobs: Any,
     exclude_nodes: Any,
+    q_name: Any,
     _prev: dict,
 ) -> tuple[dict, bool, Any]:
     """Validate resource settings and emit a config store update."""
@@ -252,6 +273,7 @@ def update_resources_config(
         "max_jobs": _int_or_default(max_jobs, "max_jobs"),
         "max_user_jobs": _int_or_default(max_user_jobs, "max_user_jobs"),
         "exclude_nodes": _str_or_default(exclude_nodes, "exclude_nodes"),
+        "q_name": _str_or_default(q_name, "q_name"),
     }
 
     warnings: list[str] = []

@@ -103,6 +103,8 @@ default_settings: dict[str, Any] = {
     "max_user_jobs": 1500,
     # Nodes to exclude from the SLURM submission list
     "exclude_nodes": "",
+    # SLURM partition/queue name (passed to #SBATCH -p)
+    "q_name": "day-long-cpu",
     # Username for the server hosting the db
     "db_user": getpass.getuser(),
     # IP address of the database host.
