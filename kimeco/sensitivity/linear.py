@@ -261,7 +261,7 @@ class Linear(CoreRun):
             )
         ptype = get_parameter_type(param)
         if ptype.value in Pclass.MULTIPLICATIVE.value:
-            factor: float = 1 + (uc - 1) * self.lin_fact
+            factor: float = uc ** self.lin_fact
             return value * factor if side == 1 else value / factor
         scale: float = self.pert.get_scale(
                 ptype=ptype.value,

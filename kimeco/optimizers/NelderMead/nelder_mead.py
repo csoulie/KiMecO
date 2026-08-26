@@ -133,7 +133,7 @@ class NelderMead:
         """
         ptype = get_parameter_type(param)
         if ptype.value in Pclass.MULTIPLICATIVE.value:
-            factor: float = 1 + (uc - 1) * self.settings['nm_dstep']
+            factor: float = uc ** self.settings['nm_dstep']
             return value * factor if side == 1 else value / factor
         scale: float = self.pert.get_scale(
                 ptype=ptype.value,

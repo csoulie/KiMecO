@@ -226,7 +226,7 @@ This section controls both static sensitivity-based parameter selection and on-t
 | SA_end | 80 | Generation index to stop on-the-fly sensitivity analysis. |
 | SA_freq | 20 | Frequency (in generations) for running on-the-fly sensitivity updates.
 
-The derivative step is direction-dependent and set by the parameter's class (not its sampling distribution). For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative: with factor `f = 1 + (uc - 1) * sensi_d` (where `uc` is the parameter uncertainty), the up step is `value * f` and the down step is `value / f` (e.g. `uc = 1.1`, `sensi_d = 0.1` → perturbed values `[value / 1.01, value * 1.01]`). Additive and percentage parameters use an additive step, `value + scale * sensi_d * side`.
+The derivative step is direction-dependent and set by the parameter's class (not its sampling distribution). For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative and computed in log space: with factor `f = uc**sensi_d` (where `uc` is the parameter uncertainty), the up step is `value * f` and the down step is `value / f` (e.g. `uc = 1.1`, `sensi_d = 0.1` → perturbed values `[value / 1.1**0.1, value * 1.1**0.1]`). Additive and percentage parameters use an additive step, `value + scale * sensi_d * side`.
 
 ## 3) Optimizer
 
@@ -258,7 +258,7 @@ These keywords control Nelder-Mead behavior. They are only used if optimizer is 
 | nm_dstep | 0.5 | Initial simplex scaling step for NM. The simplex is created using a derivative step of every active parameters, plus the initial model. |
 | nm_adaptive | false | Enables adaptive Nelder-Mead variant. |
 
-The derivative step used to build the initial simplex is direction-dependent and set by the parameter's class. For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative: with factor `f = 1 + (uc - 1) * nm_dstep`, the up step is `value * f` and the down step is `value / f`, so the two sides are symmetric under a factor and its inverse. Additive and percentage parameters use an additive step.
+The derivative step used to build the initial simplex is direction-dependent and set by the parameter's class. For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative and computed in log space: with factor `f = uc**nm_dstep`, the up step is `value * f` and the down step is `value / f`, so the two sides are symmetric under a factor and its inverse. Additive and percentage parameters use an additive step.
 
 During the final stage of optimization, the Nelder-Mead algorithm is run again with tighter tolerances after a second sensitivity analysis from the previously optimized simplex. These keywords control the final-stage NM behavior. They are only used if optimizer is set to "nelder-mead". See SciPy documentation for details on the Nelder-Mead algorithm and its parameters (https://docs.scipy.org/doc/scipy/reference/optimize.minimize-neldermead.html).
 

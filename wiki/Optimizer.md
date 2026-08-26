@@ -28,7 +28,7 @@ These keywords control Nelder-Mead behavior. They are only used if optimizer is 
 | nm_dstep | 0.5 | Initial simplex scaling step for NM. The simplex is created using a derivative step of every active parameters, plus the initial model. |
 | nm_adaptive | false | Enables adaptive Nelder-Mead variant. |
 
-Currently, the derivative step used to build the initial simplex is positive direction only, its size is set by the parameter's **class**. For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is multiplicative: with factor `f = 1 + (uc - 1) * nm_dstep`, the up step is `value * f`.
+Currently, the derivative step used to build the initial simplex is positive direction only, its size is set by the parameter's **class**. For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is multiplicative and computed in log space: with factor `f = uc**nm_dstep`, the up step is `value * f`.
 
 During the final stage of optimization, the Nelder-Mead algorithm is run again with tighter tolerances after a second sensitivity analysis from the previously optimized simplex. These keywords control the final-stage NM behavior. They are only used if optimizer is set to "nelder-mead". See SciPy documentation for details on the Nelder-Mead algorithm and its parameters (https://docs.scipy.org/doc/scipy/reference/optimize.minimize-neldermead.html).
 

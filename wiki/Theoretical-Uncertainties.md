@@ -6,7 +6,7 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 
 | Keyword | Default value | Description |
 |---|---|---|
-| max_std | 4 | Maximum deviation from initial model. |
+| max_std | 4 | Maximum deviation from the initial model, in standard deviations. For multiplicative parameters this is a log-space bound: the trusted range is `value * uncertainty**(±max_std)` (i.e. `[value / uncertainty**max_std, value * uncertainty**max_std]`), so the theory score exactly reaches `max_std**2` at the boundary. |
 | freq_mode | "batch" | Frequency perturbation mode. Possible values: "batch" or "individual". Individual mode has not been thoroughly tested. |
 | weight_theory | 1.0 | Raw theory contribution weight; normalized at runtime with weight_experiments. |
 | weight_experiments | 1.0 | Raw experiment contribution weight; normalized at runtime with weight_theory. |
@@ -37,6 +37,13 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 Any other combination cancels the run. In the GUI, only the valid distributions for a parameter's category are selectable.
 
 For multiplicative parameters the theory-score distance is measured in log space as `ln(value / reference) / ln(uncertainty)`, so the penalty is symmetric under a factor and its inverse and consistent with the log-normal (log-space) perturbation of these parameters. Additive and percentage parameters keep their linear distance.
+
+The perturbation, trust boundaries, and derivative steps for multiplicative parameters are all computed in log space consistently with this scoring:
+
+- The trusted range is `value * uncertainty**(±max_std)`, so the theory score at the boundary equals `max_std**2` exactly.
+- The log-normal sampling uses a log-space sigma of `ln(uncertainty)`, giving ±2/3/4 sigma coverage of 95.45% / 99.73% / 99.99% of samples within the corresponding `value * uncertainty**(±k)` range.
+
+Note: with this log-space reconciliation the multiplicative trust region is wider than in earlier versions for `uncertainty > 1`; multiplicative-run results are not bit-for-bit comparable with pre-reconciliation runs. Additive and percentage parameters are unaffected.
 
 <!-- ### 4.3 Distributions (distrib_*)
 |---|---|---|

@@ -103,8 +103,8 @@ class Perturbator:
                       * resolved_std * mult)
         elif ptype in self.multiplicative:
             bounds = (
-                i_val / (1 + (resolved_std-1) * mult),
-                i_val * (1 + (resolved_std-1) * mult))
+                i_val / resolved_std ** mult,
+                i_val * resolved_std ** mult)
         else:
             raise NotImplementedError('Parameter not parametrised.')
         if ptype in self.zero_bound and min(bounds) < 0:
@@ -160,11 +160,10 @@ class Perturbator:
         elif ptype in self.percent:
             return uncertainty * self.i_sop.parameters_names[param]
         elif ptype in self.multiplicative:
-            # log-space sigma so that +/-max_std*sigma reaches the
-            # get_boundaries factor 1+(std-1)*max_std; value-independent by
-            # construction.
-            mult = self.settings['max_std']
-            return float(np.log(1 + (uncertainty - 1) * mult) / mult)
+            # Log-space lognormal sigma: sampling in log space with
+            # sigma = ln(uncertainty) makes +/-2/3/4 sigma cover
+            # 95.45/99.73/99.99%, matching the log-space scoring.
+            return float(np.log(uncertainty))
         else:
             raise TypeError('Unknown parameter type in get_scale.')
 
