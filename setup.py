@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.1.5'
+VERSION = '1.1.6'
 DESCRIPTION = 'KiMecO'
 LONG_DESCRIPTION = 'Kinetic Mechanism Optimizer'
 

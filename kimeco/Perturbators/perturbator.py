@@ -11,6 +11,7 @@ from kimeco.well import Well
 import numpy as np
 from kimeco.enums import Ptype, Distrib, Pclass
 from kimeco.database.kimeco_db import dbs
+from kimeco.scoring_f.scoring import get_parameter_type
 
 
 class Perturbator:
@@ -60,11 +61,8 @@ class Perturbator:
                           distrib='DISTRIBUTIONS')
         distrib: str = ''
         for param, un in self.i_sop.uncertainties.items():
-            pshort: str = param.split(dbs)[1]
-            for ptype in Ptype:
-                if ptype.value in pshort:
-                    distrib = self.distribs[ptype].value
-                    break
+            ptype = get_parameter_type(param)
+            distrib = self.distribs[ptype].value
             msg += tpl.format(param=param,
                               un_str=f'{un:-.2E}',
                               distrib=distrib)

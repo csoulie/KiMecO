@@ -6,6 +6,7 @@ from kimeco.bimolecular import Bimolecular
 from kimeco.well import Well
 from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.logger_config import KMOLogger
+from kimeco.database.kimeco_db import dbs
 
 import os
 import sys
@@ -92,6 +93,17 @@ class MessInputReader:
             )
             self.klog.error(err)
             self._trigger_stop = True
+
+    def _reject_dbs_in_name(self, name: str, item_type: str) -> bool:
+        if dbs in name:
+            err = (
+                f"{item_type} name '{name}' from MESS input contains the "
+                f"reserved separator '{dbs}'."
+            )
+            self.klog.error(err)
+            self._trigger_stop = True
+            return True
+        return False
 
     def read(self) -> tuple[SOP, list[list[str]]]:
         """Reads a mess input file and transforms it into a
@@ -216,6 +228,8 @@ class MessInputReader:
                       line.lstrip().casefold().split()[0] == 'well'):
                     last_item = 'well'
                     name: str = line.split()[1]
+                    if self._reject_dbs_in_name(name, 'Well'):
+                        continue
                     if name not in self.SOP.items:
                         self.validate_species(species=name,
                                               species_type='Well')
@@ -239,6 +253,8 @@ class MessInputReader:
                 elif line.lstrip().casefold().startswith('bimolecular'):
                     last_item = 'bimo'
                     name: str = line.split()[1]
+                    if self._reject_dbs_in_name(name, 'Bimolecular'):
+                        continue
                     if name not in self.SOP.items:
                         self.SOP.add_new_bimol(name=name,
                                                pes_id=fid)
@@ -279,6 +295,8 @@ class MessInputReader:
                         self._trigger_stop = True
                         continue
                     name, lside, rside = tokens
+                    if self._reject_dbs_in_name(name, 'Barrier'):
+                        continue
                     if name not in self.SOP.items:
                         self.SOP.add_new_barrier(name=name,
                                                  lside=lside,
@@ -320,6 +338,8 @@ class MessInputReader:
                         and 'geom' not in line.casefold():
                     last_item = 'frag'
                     fname: str = line.split()[1]
+                    if self._reject_dbs_in_name(fname, 'Fragment'):
+                        continue
                     if isinstance(self.SOP.items[name], Bimolecular):
                         if len(self.SOP.items[name].fragments) < 2:
                             if fname not in self.SOP.items[name].frag_names:

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-08-26
+
+### Added
+- Input validation now rejects an odd population size (`n_mdl`) when the GA tournament selection style (`ga_type='tournament'`) is chosen, since tournament pairing silently drops a model on odd populations. 
+- The MESS input reader (`readers/mess_input.py`) now rejects any Well, Bimolecular, Barrier, or Fragment name containing the reserved parameter-name separator `__` (dbs), logging an error and stopping the run gracefully. This protects the `<item>__<ptype>` naming contract that all parameter-type parsing relies on.
+
+
+### Fixed
+- Parameter-type (Ptype) identification strengthened throughout the code.
+- Genetic-algorithm convergence of multiplicative parameters is now evaluated with geometric means and std.
+
+
 ## [1.1.5] - 2026-08-25
 
 ### Fixed
@@ -124,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.6]: https://github.com/sandialabs/KiMecO/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/sandialabs/KiMecO/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/sandialabs/KiMecO/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...v1.1.3
@@ -135,4 +148,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandialabs/KiMecO/releases/tag/v1.0.0
-[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.5...HEAD
+[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.6...HEAD

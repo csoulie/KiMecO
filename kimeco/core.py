@@ -1,4 +1,5 @@
 from _thread import LockType
+from copy import deepcopy
 import sys
 from typing import Any, Optional
 import os
@@ -265,7 +266,7 @@ class CoreRun:
         table_name: str = self.get_table_name(mdl)
 
         self.models[mdl.id] = Model(
-            sop=self.pert.perturb(sop=self.previous_el[mdl.id].sop),
+            sop=self.pert.perturb(sop=deepcopy(self.previous_el[mdl.id].sop)),
             id=mdl.id,
             gen=mdl.gen
             )

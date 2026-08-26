@@ -11,6 +11,7 @@ from kimeco.gui.histogram import Histogram
 import numpy as np
 from kimeco.enums import Ptype
 from kimeco.database.kimeco_db import dbs
+from kimeco.scoring_f.scoring import get_parameter_type
 from typing import cast
 
 
@@ -238,10 +239,7 @@ class SOPSection(Section):
         """
         idx: int = self.sop_db.columns.index(col)
         init_val: float = self.gapp.init_vals[idx+1]
-        param: str = col.split(dbs)[1]
-        for ptype in Ptype:
-            if ptype.value in param:
-                break
+        ptype = get_parameter_type(col)
         if ptype == Ptype.SCORE:  # computed output, no perturbation bounds
             return [0, init_val]
         return list(self.pert.get_boundaries(
@@ -275,10 +273,7 @@ class SOPSection(Section):
         }
         raw_molec: str = col.split(dbs)[0]
         molec: str = raw_molec
-        param: str = col.split(dbs)[1]
-        for ptype in ptypes:
-            if ptype in param:
-                break
+        ptype = get_parameter_type(col).value
         if ptype == Ptype.IF.value:
             item = self.init_SOP.items[raw_molec]
             if not isinstance(item, Barrier):
@@ -342,10 +337,7 @@ class SOPSection(Section):
                        line_color='black')
 
         # Score columns have no perturbation bounds -> skip brown vlines
-        param: str = col.split(dbs)[1]
-        for ptype in Ptype:
-            if ptype.value in param:
-                break
+        ptype = get_parameter_type(col)
         is_score: bool = ptype == Ptype.SCORE
 
         lb: float = min(boundaries)
