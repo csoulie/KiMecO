@@ -310,27 +310,27 @@ def validate_sop(
     full_input = {**default_settings}
     full_input.update(temp_input)
 
-    mech = get_loaded_kinmec(ct_yaml_path)
-    if mech is None:
-        raise ValueError(
-            "Mechanism is not loaded. Re-validate ct_yaml in tab 1 first."
+    try:
+        mech = get_loaded_kinmec(ct_yaml_path)
+        if mech is None:
+            raise ValueError(
+                "Mechanism is not loaded. Re-validate ct_yaml in tab 1 first."
+            )
+
+        full_input["postprocess"] = False
+        full_input["init_loc"] = os.getcwd()
+
+        # Try to read MESS inputs
+        mr = MessInputReader(
+            settings=full_input,
+            mechanism_species=[
+                sp.name
+                for sp in mech.species
+            ],
+            klog=cast(KMOLogger, gui_logger),
+            postprocess=False
         )
 
-    full_input["postprocess"] = False
-    full_input["init_loc"] = os.getcwd()
-
-    # Try to read MESS inputs
-    mr = MessInputReader(
-        settings=full_input,
-        mechanism_species=[
-            sp.name
-            for sp in mech.species
-        ],
-        klog=cast(KMOLogger, gui_logger),
-        postprocess=False
-    )
-
-    try:
         sop, _ = mr.read()
         if mr._trigger_stop:
             raise ValueError(
@@ -392,4 +392,7 @@ def validate_sop(
             log_style,
             [],
         )
+    finally:
+        gui_logger.removeHandler(stream_handler)
+        gui_logger.setLevel(previous_level)
 

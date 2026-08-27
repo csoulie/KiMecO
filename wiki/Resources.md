@@ -13,4 +13,4 @@ This section controls per-job SLURM resources and global scheduling limits.
 | max_jobs | 600 | Maximum submitted jobs for current KiMecO instance. |
 | max_user_jobs | 1500 | Maximum submitted jobs for the current user. |
 | exclude_nodes | "" | Comma-separated SLURM nodes to exclude. |
-| q_name | none (required) | SLURM partition/queue name passed to #SBATCH -p. **Mandatory** (no default): a run that omits it is rejected. Validated live against the partitions reported by `sinfo`; an unknown partition (or a `sinfo` that cannot be run) stops the run cleanly and lists the available partitions. Ensure SLURM is on `PATH`. |
+| q_name | none (required) | SLURM partition/queue name passed to #SBATCH -p. **Mandatory** (no default): a run that omits it is rejected. Validated live against the partitions reported by `sinfo`; an unknown partition (or a `sinfo` that cannot be run) stops the run cleanly and lists the available partitions. Ensure SLURM is on `PATH`. In the `kmo_start` GUI this field is a dropdown auto-populated from the live `sinfo` partitions; on machines without SLURM (where `sinfo` is unavailable) it falls back to a free-text input. |

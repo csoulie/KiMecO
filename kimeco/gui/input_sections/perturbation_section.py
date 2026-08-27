@@ -747,7 +747,6 @@ def enforce_percent_distributions(
     Output("perturbation-valid-store", "data"),
     Output("perturbation-validation-message", "children"),
     Output("perturbation-validation-message", "style"),
-    Input("perturbation-pert-dropdown", "value"),
     Input("perturbation-max-std-input", "value"),
     Input("perturbation-weight-theory-input", "value"),
     Input("perturbation-weight-experiments-input", "value"),
@@ -783,7 +782,6 @@ def enforce_percent_distributions(
     prevent_initial_call=True,
 )
 def update_perturbation_config(
-    pert: str,
     max_std: int,
     weight_theory: float,
     weight_experiments: float,

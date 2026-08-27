@@ -50,7 +50,6 @@ def test_legacy_generic_distrib_options_removed() -> None:
 
 def test_update_perturbation_config_preserves_zero_weights() -> None:
     config, valid, message, style = update_perturbation_config(
-        pert="normal",
         max_std=4,
         weight_theory=0.0,
         weight_experiments=0.0,

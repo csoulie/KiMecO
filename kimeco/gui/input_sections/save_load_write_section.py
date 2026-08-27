@@ -685,7 +685,6 @@ def save_config_download(
     Output("optimizer-nm-maxfev-input", "value"),
     Output("optimizer-nm-dstep-input", "value"),
     Output("optimizer-nm-adaptive-input", "value"),
-    Output("perturbation-pert-dropdown", "value"),
     Output("perturbation-max-std-input", "value"),
     Output("perturbation-weight-theory-input", "value"),
     Output("perturbation-weight-experiments-input", "value"),
@@ -735,7 +734,7 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
     """Load JSON config from disk and update GUI controls/stores."""
     triggered_id = callback_context.triggered_id
     if not n_clicks and triggered_id != "autoload-config-path-store":
-        return (no_update,) * 69
+        return (no_update,) * 68
 
     try:
         requested_path = autoload_path if triggered_id == "autoload-config-path-store" else config_path
@@ -856,5 +855,5 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
         return (
             f"Failed to load config: {exc}",
             _status_style(success=False),
-            *([no_update] * 67),
+            *([no_update] * 66),
         )

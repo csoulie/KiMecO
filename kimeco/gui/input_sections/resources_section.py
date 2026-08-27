@@ -1,9 +1,55 @@
 """Resources section for SLURM, CPU and memory job settings."""
+import subprocess
 from typing import Any
 
 from dash import Input, Output, State, callback, dcc, html
 
 from kimeco.default_settings import default_settings
+
+
+def _slurm_partitions() -> list[str]:
+    """Return available SLURM partition names via ``sinfo``.
+
+    Returns an empty list when SLURM is not available or the query fails.
+    """
+    try:
+        result = subprocess.run(
+            ["sinfo"], capture_output=True, text=True, check=True
+        )
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError):
+        return []
+
+    partitions: list[str] = []
+    seen: set[str] = set()
+    for line in result.stdout.splitlines()[1:]:
+        if not line.strip():
+            continue
+        name = line.split()[0].rstrip("*")
+        if name not in seen:
+            seen.add(name)
+            partitions.append(name)
+    return partitions
+
+
+def _q_name_control(default_q: str):
+    """Build the partition control: dropdown if SLURM is available, else text."""
+    partitions = _slurm_partitions()
+    if partitions:
+        return dcc.Dropdown(
+            id="res-q-name",
+            options=[{"label": p, "value": p} for p in partitions],
+            value=default_q,
+            clearable=False,
+            className="form-select form-select-sm",
+        )
+    return dcc.Input(
+        id="res-q-name",
+        type="text",
+        value=default_q,
+        placeholder="e.g. day-long-cpu",
+        debounce=True,
+        className="form-control form-control-sm",
+    )
 
 
 def _int_or_default(value: Any, key: str) -> int:
@@ -69,14 +115,7 @@ def create_resources_section() -> html.Div:
                     "Partition (queue)",
                     className="form-label fw-semibold"
                 ),
-                dcc.Input(
-                    id="res-q-name",
-                    type="text",
-                    value=ds.get("q_name", ""),
-                    placeholder="e.g. day-long-cpu",
-                    debounce=True,
-                    className="form-control form-control-sm",
-                ),
+                _q_name_control(ds.get("q_name", "")),
                 html.Small(
                     "Passed to #SBATCH -p (SLURM partition).",
                     className="form-text text-muted",
