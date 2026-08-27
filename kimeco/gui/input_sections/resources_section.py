@@ -72,7 +72,7 @@ def create_resources_section() -> html.Div:
                 dcc.Input(
                     id="res-q-name",
                     type="text",
-                    value=ds["q_name"],
+                    value=ds.get("q_name", ""),
                     placeholder="e.g. day-long-cpu",
                     debounce=True,
                     className="form-control form-control-sm",
@@ -229,7 +229,7 @@ def _default_config() -> dict:
         "max_jobs": ds["max_jobs"],
         "max_user_jobs": ds["max_user_jobs"],
         "exclude_nodes": ds["exclude_nodes"],
-        "q_name": ds["q_name"],
+        "q_name": ds.get("q_name", ""),
     }
 
 
@@ -273,7 +273,7 @@ def update_resources_config(
         "max_jobs": _int_or_default(max_jobs, "max_jobs"),
         "max_user_jobs": _int_or_default(max_user_jobs, "max_user_jobs"),
         "exclude_nodes": _str_or_default(exclude_nodes, "exclude_nodes"),
-        "q_name": _str_or_default(q_name, "q_name"),
+        "q_name": str(q_name) if q_name is not None else "",
     }
 
     warnings: list[str] = []

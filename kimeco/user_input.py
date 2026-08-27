@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import subprocess
 from typing import Any
 from kimeco.default_settings import default_settings, mandatory_keys
 import numpy as np
@@ -682,6 +683,52 @@ class KMOInput:
             )
             self.cancel_run = True
 
+    def _check_partition(self) -> None:
+        """Validate the requested SLURM partition against ``sinfo``.
+
+        The ``q_name`` keyword is forwarded to ``#SBATCH -p``. Submitting an
+        unknown partition would only fail once the batch scheduler rejects the
+        job, so query the live partition list here and fail fast with an
+        actionable message. Fails closed: if ``sinfo`` cannot be run the run is
+        cancelled rather than silently trusting an unverified partition.
+        """
+        q_name = self.json_file.get('q_name')
+        if not q_name:
+            # Absence is already flagged by basic_checks; nothing to verify.
+            return
+
+        try:
+            result = subprocess.run(
+                ['sinfo'],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError, OSError):
+            self.klog.warning(
+                "'sinfo' could not be run to validate the 'q_name' partition; "
+                "ensure SLURM is available on PATH."
+            )
+            self.cancel_run = True
+            return
+
+        partitions: set[str] = set()
+        for line in result.stdout.splitlines()[1:]:
+            if not line.strip():
+                continue
+            partitions.add(line.split()[0].rstrip('*'))
+
+        if q_name not in partitions:
+            available = (
+                ', '.join(sorted(partitions)) if partitions
+                else '(none reported)'
+            )
+            self.klog.warning(
+                f"'q_name' partition '{q_name}' is not a valid SLURM "
+                f"partition. Available partitions: {available}"
+            )
+            self.cancel_run = True
+
     def full_run_settings(self) -> dict[str, Any]:
         """Merge the users settings with the default values.
 
@@ -703,6 +750,7 @@ class KMOInput:
             self.json_file.get('use_automech', False))
         if self.json_file['use_automech']:
             self._check_automech()
+        self._check_partition()
         if self.cancel_run:
             sys.exit(-1)
         self.json_file['init_loc'] = self.init_loc

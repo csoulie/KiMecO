@@ -27,6 +27,7 @@ def _settings(tmp_path: Path, use_automech: bool) -> dict:
         "n_exp": 2,
         "exclude_nodes": "",
         "max_user_jobs": 128,
+        "q_name": "day-long-cpu",
         "scratch_base": str(tmp_path) + "/",
         "project_name": "GAME_TEST",
         "use_automech": use_automech,

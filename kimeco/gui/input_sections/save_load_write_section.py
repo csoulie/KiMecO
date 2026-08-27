@@ -850,7 +850,7 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
             loaded.get("max_jobs", default_settings["max_jobs"]),
             loaded.get("max_user_jobs", default_settings["max_user_jobs"]),
             loaded.get("exclude_nodes", default_settings["exclude_nodes"]),
-            loaded.get("q_name", default_settings["q_name"]),
+            loaded.get("q_name", ""),
         )
     except Exception as exc:
         return (
