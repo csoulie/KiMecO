@@ -52,8 +52,8 @@ class MessInputReader:
             self.SOP.temp = settings["pp_temp"]
             self.SOP.pres = settings["pp_pres"]
         else:
-            self.SOP.temp = settings["rc_temp"]
-            self.SOP.pres = settings["rc_pres"]
+            self.SOP.temp = settings.get("rc_temp", [])
+            self.SOP.pres = settings.get("rc_pres", [])
         self.SOP.pres_unit = 'bar'
         self.klog: KMOLogger = klog
         self.mechanism_species: list[str] = mechanism_species
