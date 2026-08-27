@@ -218,22 +218,26 @@ class Linear(CoreRun):
         # Use the first SOP as a template
         sop_template: SOP = sop_list[0]
 
-        # Get the parameter names and initialize a dictionary to hold the sums
+        # Get the parameter names
         parameter_names: dict[str, Any] = sop_template.parameters_names
-        sums: dict[str, float] = {key: 0.0 for key in parameter_names.keys()}
 
         # Count the number of SOP objects for averaging
         count: int = len(sop_list)
 
-        # Sum the parameters from each SOP object
-        for sop in sop_list:
-            for key in sums.keys():
-                sums[key] += sop.parameters_names[key]
-
-        # Calculate the average for each parameter
-        averages: dict[str, float] = {
-            key: value / count for key, value in sums.items()
-            }
+        # Average each parameter using the appropriate mean for its type
+        averages: dict[str, float] = {}
+        for key in parameter_names.keys():
+            values = [sop.parameters_names[key] for sop in sop_list]
+            ptype = get_parameter_type(key)
+            if ptype.value in Pclass.MULTIPLICATIVE.value:
+                if len(values) == 0 or any(v <= 0.0 for v in values):
+                    raise ValueError(
+                        f"Cannot compute geometric mean for multiplicative "
+                        f"parameter '{key}': empty or non-positive values.")
+                logs = np.log(np.array(values, dtype=float))
+                averages[key] = float(np.exp(np.mean(logs)))
+            else:
+                averages[key] = sum(values) / count
 
         # Create a new SOP object using the from_db_row method
         return SOP.from_db_row(sop_template, list(averages.values()))
