@@ -5,7 +5,7 @@ optimizer (``NelderMead.calculate_dstep`` + ``get_initial_simplex``).
 Both ``calculate_dstep`` implementations now RETURN the perturbed value and
 dispatch on the parameter class via ``get_parameter_type``:
 
-* MULTIPLICATIVE (if, freq, bfc, sfc, mrc): factor = 1 + (uc-1)*step;
+* MULTIPLICATIVE (if, freq, bfc, sfc, mrc): factor = uc**step;
   side=+1 -> value*factor, side=-1 -> value/factor  (geometric/log symmetric).
 * ADDITIVE (we, be, pow) / PERCENT (hrs, sigma, epsilon, fact):
   value + get_scale(ptype, param) * step * side          (linear symmetric).
@@ -81,13 +81,13 @@ def _make_nm(pert: Perturbator, nm_dstep: float) -> NelderMead:
 # ===========================================================================
 
 def test_sa_multiplicative_worked_example_exact() -> None:
-    """uc=1.1, sensi_d=0.1, value=1.0, 'if' -> up/down == [1.01, 1/1.01]."""
+    """uc=1.1, sensi_d=0.1, value=1.0, 'if' -> up/down == [1.1**0.1, 1/1.1**0.1]."""
     pert = _make_pert({IF_P: 1.1}, {IF_P: 1.0})
     sa = _make_sa(pert, lin_fact=0.1)
     up = sa.calculate_dstep(uc=1.1, param=IF_P, side=1, value=1.0)
     down = sa.calculate_dstep(uc=1.1, param=IF_P, side=-1, value=1.0)
-    assert up == pytest.approx(1.01)
-    assert down == pytest.approx(1 / 1.01)
+    assert up == pytest.approx(1.1 ** 0.1)
+    assert down == pytest.approx(1 / 1.1 ** 0.1)
 
 
 def test_sa_multiplicative_magnitudes_for_nonunit_value() -> None:
@@ -95,7 +95,7 @@ def test_sa_multiplicative_magnitudes_for_nonunit_value() -> None:
     value = 800.0
     pert = _make_pert({IF_P: 1.2}, {IF_P: value})
     sa = _make_sa(pert, lin_fact=0.1)
-    factor = 1 + (1.2 - 1) * 0.1
+    factor = 1.2 ** 0.1
     up = sa.calculate_dstep(uc=1.2, param=IF_P, side=1, value=value)
     down = sa.calculate_dstep(uc=1.2, param=IF_P, side=-1, value=value)
     assert up == pytest.approx(value * factor)
@@ -107,7 +107,7 @@ def test_sa_multiplicative_log_symmetry() -> None:
     value = 500.0
     pert = _make_pert({MRC_P: 1.3}, {MRC_P: value})
     sa = _make_sa(pert, lin_fact=0.2)
-    f = 1 + (1.3 - 1) * 0.2
+    f = 1.3 ** 0.2
     up = sa.calculate_dstep(uc=1.3, param=MRC_P, side=1, value=value)
     down = sa.calculate_dstep(uc=1.3, param=MRC_P, side=-1, value=value)
     assert up / value == pytest.approx(f)
@@ -116,12 +116,12 @@ def test_sa_multiplicative_log_symmetry() -> None:
 
 
 def test_sa_multiplicative_no_double_scaling() -> None:
-    """Exactly [1/f, f]*value with f = 1+(uc-1)*lin_fact, nothing extra."""
+    """Exactly [1/f, f]*value with f = uc**lin_fact, nothing extra."""
     value = 3.0
     uc, lin = 1.5, 0.1
     pert = _make_pert({IF_P: uc}, {IF_P: value})
     sa = _make_sa(pert, lin_fact=lin)
-    f = 1 + (uc - 1) * lin
+    f = uc ** lin
     assert sa.calculate_dstep(uc=uc, param=IF_P, side=1,
                               value=value) == pytest.approx(value * f)
     assert sa.calculate_dstep(uc=uc, param=IF_P, side=-1,
@@ -129,22 +129,25 @@ def test_sa_multiplicative_no_double_scaling() -> None:
 
 
 def test_sa_multiplicative_regression_not_linear_logsigma() -> None:
-    """Regression: multiplicative up is value*f, NOT value + get_scale*lin_fact.
+    """Regression: multiplicative up is value*uc**lin, NOT value + ln(uc)*lin.
 
-    The pre-fix bug added the log-space sigma linearly. Here we prove the
-    returned value equals the geometric step and differs from the linear one.
+    The pre-fix bug added the log-space sigma linearly. With uc=2.0, lin=0.5 the
+    geometric step is value*2**0.5 == 1.41421..., clearly separated from the
+    buggy linear-log-sigma value 1 + ln(2)*0.5 == 1.34657.
     """
     value = 1.0
-    uc, lin = 1.1, 0.1
+    uc, lin = 2.0, 0.5
     pert = _make_pert({IF_P: uc}, {IF_P: value},
                       std_overrides={"max_std": 3})
     sa = _make_sa(pert, lin_fact=lin)
     up = sa.calculate_dstep(uc=uc, param=IF_P, side=1, value=value)
-    f = 1 + (uc - 1) * lin
+    f = uc ** lin
     assert up == pytest.approx(value * f)
+    assert up == pytest.approx(1.41421356)
     # The (buggy) linear-in-log-sigma value must differ.
     scale = pert.get_scale(ptype=Ptype.IF.value, param=IF_P)
     buggy = value + scale * lin
+    assert buggy == pytest.approx(1.34657359)
     assert abs(up - buggy) > 1e-4
 
 
@@ -247,7 +250,7 @@ def test_nm_multiplicative_uses_nm_dstep_not_sensi_d() -> None:
     value, uc, step = 2.0, 1.2, 0.05
     pert = _make_pert({IF_P: uc}, {IF_P: value})
     nm = _make_nm(pert, nm_dstep=step)
-    f = 1 + (uc - 1) * step
+    f = uc ** step
     assert nm.calculate_dstep(uc=uc, param=IF_P, side=1,
                               value=value) == pytest.approx(value * f)
 
@@ -257,7 +260,7 @@ def test_nm_multiplicative_side_symmetry() -> None:
     value, uc, step = 7.0, 1.4, 0.1
     pert = _make_pert({MRC_P: uc}, {MRC_P: value})
     nm = _make_nm(pert, nm_dstep=step)
-    f = 1 + (uc - 1) * step
+    f = uc ** step
     up = nm.calculate_dstep(uc=uc, param=MRC_P, side=1, value=value)
     down = nm.calculate_dstep(uc=uc, param=MRC_P, side=-1, value=value)
     assert up == pytest.approx(value * f)
@@ -307,6 +310,6 @@ def test_nm_initial_simplex_multiplicative_vertex_roundtrips() -> None:
     # Row 0 is the (normalized) initial vertex -> 0 in log space.
     assert simplex[0][0] == pytest.approx(0.0)
     # Row 1 is the perturbed vertex; back-transform must equal value*f.
-    f = 1 + (uc - 1) * step
+    f = uc ** step
     recovered = nm.get_absolute(param=IF_P, value=simplex[1][0])
     assert recovered == pytest.approx(value * f)

@@ -133,7 +133,7 @@ class NelderMead:
         """
         ptype = get_parameter_type(param)
         if ptype.value in Pclass.MULTIPLICATIVE.value:
-            factor: float = 1 + (uc - 1) * self.settings['nm_dstep']
+            factor: float = uc ** self.settings['nm_dstep']
             return value * factor if side == 1 else value / factor
         scale: float = self.pert.get_scale(
                 ptype=ptype.value,
@@ -159,11 +159,7 @@ class NelderMead:
             float: the normalized value
         """
         bounds: tuple[float, float] = self.get_bound(parameter)
-        ptype = Ptype.WE
-        for pt in Ptype:
-            if pt.value in parameter:
-                ptype: Ptype = pt
-                break
+        ptype = get_parameter_type(parameter)
         pclass = Pclass.ADDITIVE
         for pc in Pclass:
             if ptype.value in pc.value:
@@ -208,11 +204,7 @@ class NelderMead:
             float: the absolute value
         """
         bounds: tuple[float, float] = self.get_bound(param)
-        ptype = Ptype.WE
-        for pt in Ptype:
-            if pt.value in param:
-                ptype: Ptype = pt
-                break
+        ptype = get_parameter_type(param)
         pclass = Pclass.ADDITIVE
         for pc in Pclass:
             if ptype.value in pc.value:
@@ -510,11 +502,7 @@ class NelderMead:
         Returns:
             tuple[float, float]: absolute values of the bounds
         """
-        pt = Ptype.WE
-        for ptype in Ptype:
-            if ptype.value in parameter:
-                pt: Ptype = ptype
-                break
+        pt = get_parameter_type(parameter)
         return self.pert.get_boundaries(
             ptype=pt.value,
             i_val=self.f_mdl.sop.parameters_names[parameter],

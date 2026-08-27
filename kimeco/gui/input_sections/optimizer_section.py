@@ -80,6 +80,10 @@ def _validate_config(config: dict[str, Any]) -> tuple[bool, str]:
         "exp", "tournament"
     }:
         return False, "ga_type must be exp or tournament for GA."
+    if (config["optimizer"] == "ga"
+            and config["ga_type"] == "tournament"
+            and config["n_mdl"] % 2 != 0):
+        return False, "Tournament GA requires an even n_mdl."
     return True, "Optimizer settings are valid."
 
 

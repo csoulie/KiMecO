@@ -68,7 +68,10 @@ that value is interpreted. Uncertainties fall into three kinds:
 | Multidimensional-rotor symmetry | `SymmetryFactor of Core MultiRotor` internal rotations of `C₂H₅O₂` | `std_mrc` | `1.5` | **Multiplicative factor** (scales the density of states) |
 
 `max_std` (`3`) caps how many standard deviations away from the nominal SOP any
-perturbed parameter is allowed to reach.
+perturbed parameter is allowed to reach. For multiplicative parameters this bound
+is applied in log space, so the trusted range is `value * uncertainty**(±max_std)`
+(here `value * uncertainty**3` on the high side and `value / uncertainty**3` on the
+low side).
 
 > Note: the symmetry factors carry no genuine physical uncertainty; `std_sfc`
 > and `std_mrc` are provided so the corresponding density of states can be

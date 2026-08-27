@@ -504,31 +504,33 @@ class SOP:
             key (str): parameter name
             value (float): value in db
         """
+        from kimeco.scoring_f.scoring import get_parameter_type
+        ptype = get_parameter_type(key)
 
-        if Ptype.SCORE.value in key:
+        if ptype == Ptype.SCORE:
             exp_name: str = key.split(dbs)[0]
             self.scores[exp_name] = float(value)
             return
         # Energy transfer probability, factor
-        elif Ptype.ETF.value in key:
+        elif ptype == Ptype.ETF:
             self.factor = value
             return
         # Energy transfer probability, exponent
-        elif Ptype.ETP.value in key:
+        elif ptype == Ptype.ETP:
             self.power = value
             return
-        elif Ptype.EPSI.value in key:
+        elif ptype == Ptype.EPSI:
             idx = int(key.split(Ptype.EPSI.value)[-1])
             self.epsilons[idx] = value
             return
-        elif Ptype.SIG.value in key:
+        elif ptype == Ptype.SIG:
             idx = int(key.split(Ptype.SIG.value)[-1])
             self.sigmas[idx] = value
             return
         item_name: str = dbs.join(key.split(dbs)[:-1])
         param_name: str = key.split(dbs)[-1]
         # Energies
-        if param_name == Ptype.WE.value:
+        if ptype == Ptype.WE:
             item = self.items[item_name]
             if isinstance(item, Well) and not isinstance(item, Barrier):
                 item.dE = float(value) - float(item._energy)
@@ -536,22 +538,22 @@ class SOP:
                 raise KeyError(
                     f"Unexpected WE parameter for non-well item: {item_name}"
                 )
-        elif param_name == Ptype.BE.value:
+        elif ptype == Ptype.BE:
             self.items[item_name]._energy = value
         # Imaginary frequencies
-        elif Ptype.IF.value in param_name:
+        elif ptype == Ptype.IF:
             item = self.items[item_name]
             if not isinstance(item, Barrier):
                 raise KeyError(f'Expected Barrier for IF parameter: {item_name}')
             item.ifreq = value
         # symmetry factor
-        elif Ptype.SFC.value in param_name:
+        elif ptype == Ptype.SFC:
             item = self.items[item_name]
             if not isinstance(item, Barrier):
                 raise KeyError(f'Expected Barrier for SFC parameter: {item_name}')
             item.sfc = value
         # Frequencies
-        elif Ptype.BFC.value in param_name:
+        elif ptype == Ptype.BFC:
             item = self.items[item_name]
             if isinstance(item, Bimolecular):
                 msg: str = f'Unexpected BFC parameter'
@@ -559,7 +561,7 @@ class SOP:
                 raise KeyError(msg)
             else:
                 item.bfc = float(value)
-        elif Ptype.IFC.value in param_name:
+        elif ptype == Ptype.IFC:
             idx = int(param_name.split(Ptype.IFC.value)[-1])
             item = self.items[item_name]
             if not isinstance(item, Barrier):
@@ -569,7 +571,7 @@ class SOP:
             else:
                 item.ifc[idx] = float(value)
         # Hindered rotors
-        elif Ptype.HRS.value in param_name:
+        elif ptype == Ptype.HRS:
             idx = int(param_name.split(Ptype.HRS.value)[-1])
             # Reset the rotor's scan
             item = self.items[item_name]
@@ -580,7 +582,7 @@ class SOP:
             else:
                 item.h_rotors[idx].pert = value
         # Multi rotors
-        elif Ptype.MRC.value in param_name:
+        elif ptype == Ptype.MRC:
             idx = int(param_name.split(Ptype.MRC.value)[-1])
             # Reset the rotor's scan
             item = self.items[item_name]

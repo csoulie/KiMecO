@@ -7,7 +7,7 @@ parameter class:
 
 * ADDITIVE       (we, be, pow)              -> sigma = std                 (linear axis)
 * PERCENT        (hrs, sigma, epsilon, fact)-> sigma = std * value         (linear axis)
-* MULTIPLICATIVE (if, freq, bfc, sfc, mrc)  -> sigma = log(1+(std-1)*ms)/ms (log axis)
+* MULTIPLICATIVE (if, freq, bfc, sfc, mrc)  -> sigma = ln(std); bounds value*std**(+/-ms)
 
 Everything runs through the REAL ``Perturbator`` backend -- no MESS/HPC/DB.
 The abstract-ish base class carries no abstract methods, so it is instantiated
@@ -38,6 +38,8 @@ SEED = 20250820
 N = 100_000
 # +/-3 sigma of a standard normal -> 0.997300; +/-4 sigma -> 0.999937.
 THREE_SIGMA = 0.9973002
+# +/-2 sigma of a standard normal -> 0.954500.
+TWO_SIGMA = 0.9544997
 PARAM = "p"
 
 
@@ -91,11 +93,12 @@ def _coverage(pert: Perturbator, ptype: str, i_val: float,
 # ===========================================================================
 
 def test_multiplicative_canonical_boundaries_exact() -> None:
-    """value=1, std=1.2, max_std=3 -> bounds (1/1.6, 1.6) exactly."""
+    """value=1, std=1.2, max_std=3 -> bounds (1/1.2**3, 1.2**3) exactly."""
     pert = _make_pert({"max_std": 3, "std_if": 1.2}, 1.2, 1.0)
     lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=1.0)
-    assert lo == pytest.approx(1 / 1.6)
-    assert hi == pytest.approx(1.6)
+    assert lo == pytest.approx(1 / 1.728)
+    assert hi == pytest.approx(1.728)
+    assert (lo, hi) == pytest.approx((1 / 1.2 ** 3, 1.2 ** 3))
 
 
 def test_multiplicative_log_symmetry_for_value_not_one() -> None:
@@ -103,7 +106,7 @@ def test_multiplicative_log_symmetry_for_value_not_one() -> None:
     i_val = 800.0
     pert = _make_pert({"max_std": 4, "std_if": 1.1}, 1.1, i_val)
     lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=i_val)
-    factor = 1 + (1.1 - 1) * 4
+    factor = 1.1 ** 4  # geometric: std ** max_std == 1.4641
     assert lo == pytest.approx(i_val / factor)
     assert hi == pytest.approx(i_val * factor)
     # Geometric (log) symmetry about i_val.
@@ -133,8 +136,9 @@ def test_large_std_multiplicative_lower_bound_stays_positive() -> None:
     lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=1.0)
     assert lo > 0.0
     assert hi > lo
-    # Division-based lower bound: 1 / (1 + (4-1)*5) = 1/16.
-    assert lo == pytest.approx(1 / 16)
+    # Division-based lower bound: 1 / 4**5 = 1/1024.
+    assert lo == pytest.approx(1 / 4 ** 5)
+    assert hi == pytest.approx(4 ** 5)
 
 
 def test_zero_bound_clamps_negative_lower_to_zero() -> None:
@@ -277,27 +281,38 @@ def test_additive_normal_above_999_coverage_at_max_std_4() -> None:
 # Group 4 -- Coverage on the LOG axis (multiplicative)
 # ===========================================================================
 
-def test_multiplicative_canonical_scale_is_log_1_6_over_3() -> None:
-    """max_std * get_scale == log(1.6) for the canonical multiplicative case."""
+def test_multiplicative_canonical_scale_is_ln_std() -> None:
+    """get_scale returns the log-space sigma ln(std) for a multiplicative param."""
     pert = _make_pert({"max_std": 3, "std_if": 1.2}, 1.2, 1.0)
     scale = pert.get_scale(ptype=Ptype.IF.value, param=PARAM)
-    assert 3 * scale == pytest.approx(np.log(1.6))
+    assert scale == pytest.approx(np.log(1.2))
+    # max_std * sigma reaches exactly the log of the boundary factor 1.2**3.
+    assert 3 * scale == pytest.approx(np.log(1.2 ** 3))
 
 
 def test_multiplicative_lognormal_997_coverage_headline() -> None:
-    """value=1, std=1.2, max_std=3: lognormal draws ~99.73% within (1/1.6,1.6)."""
+    """value=1, std=1.2, max_std=3: lognormal ~99.73% within (1/1.728,1.728)."""
     pert = _make_pert({"max_std": 3, "std_if": 1.2}, 1.2, 1.0)
     lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=1.0)
-    assert (lo, hi) == pytest.approx((1 / 1.6, 1.6))
+    assert (lo, hi) == pytest.approx((1 / 1.728, 1.728))
     frac = _coverage(pert, Ptype.IF.value, 1.0, Distrib.LOGNORMAL)
     assert abs(frac - THREE_SIGMA) < 0.004
+
+
+def test_multiplicative_lognormal_9545_coverage_at_max_std_2() -> None:
+    """max_std=2, std=1.2: lognormal ~95.45% within (1/1.44, 1.44) (+/-2sigma)."""
+    pert = _make_pert({"max_std": 2, "std_if": 1.2}, 1.2, 1.0)
+    lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=1.0)
+    assert (lo, hi) == pytest.approx((1 / 1.44, 1.44))
+    frac = _coverage(pert, Ptype.IF.value, 1.0, Distrib.LOGNORMAL)
+    assert abs(frac - TWO_SIGMA) < 0.005
 
 
 def test_multiplicative_small_std_997_coverage() -> None:
     """A SMALL multiplicative std (1.1) still yields ~99.73% +/-3sigma coverage."""
     pert = _make_pert({"max_std": 3, "std_if": 1.1}, 1.1, 1.0)
     scale = pert.get_scale(ptype=Ptype.IF.value, param=PARAM)
-    assert 3 * scale == pytest.approx(np.log(1 + (1.1 - 1) * 3))
+    assert 3 * scale == pytest.approx(np.log(1.1 ** 3))
     frac = _coverage(pert, Ptype.IF.value, 1.0, Distrib.LOGNORMAL)
     assert abs(frac - THREE_SIGMA) < 0.004
 
@@ -306,8 +321,8 @@ def test_multiplicative_large_std_997_coverage() -> None:
     """A LARGE multiplicative std (4) still yields ~99.73% +/-3sigma coverage."""
     pert = _make_pert({"max_std": 3, "std_if": 4.0}, 4.0, 1.0)
     lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=1.0)
-    # factor = 1 + (4-1)*3 = 10 -> bounds (0.1, 10).
-    assert (lo, hi) == pytest.approx((0.1, 10.0))
+    # factor = 4**3 = 64 -> bounds (1/64, 64).
+    assert (lo, hi) == pytest.approx((1 / 64, 64.0))
     frac = _coverage(pert, Ptype.IF.value, 1.0, Distrib.LOGNORMAL)
     assert abs(frac - THREE_SIGMA) < 0.004
 
@@ -316,7 +331,7 @@ def test_multiplicative_default_max_std_4_above_999_coverage() -> None:
     """Default max_std=4 generalises: multiplicative lognormal covers >99.9%."""
     pert = _make_pert({"max_std": 4, "std_if": 1.2}, 1.2, 1.0)
     scale = pert.get_scale(ptype=Ptype.IF.value, param=PARAM)
-    assert 4 * scale == pytest.approx(np.log(1 + (1.2 - 1) * 4))
+    assert 4 * scale == pytest.approx(np.log(1.2 ** 4))
     frac = _coverage(pert, Ptype.IF.value, 1.0, Distrib.LOGNORMAL)
     assert frac > 0.999
 
@@ -334,17 +349,17 @@ def test_multiplicative_scale_is_value_independent() -> None:
 
 
 def test_multiplicative_scale_regression_not_prefix_arithmetic() -> None:
-    """Regression guard: get_scale is log((std-1)*ms+1)/ms, NOT (std-1)*value.
+    """Regression guard: get_scale is ln(std), NOT (std-1)*value.
 
-    Canonical case (value=1, std=1.2, max_std=3): the corrected log-space sigma
-    is log(1.6)/3 ~ 0.1567, whereas the pre-fix arithmetic (std-1)*value = 0.2.
+    Canonical case (value=1, std=1.2, max_std=3): the log-space sigma is
+    ln(1.2) ~ 0.18232, whereas the pre-fix arithmetic (std-1)*value = 0.2.
     """
     pert = _make_pert({"max_std": 3, "std_if": 1.2}, 1.2, 1.0)
     scale = pert.get_scale(ptype=Ptype.IF.value, param=PARAM)
     lo, hi = pert.get_boundaries(ptype=Ptype.IF.value, i_val=1.0)
-    # Correct identity: log(upper / i_val) / max_std.
+    # Correct identity: ln(std) == log(upper / i_val) / max_std.
     assert scale == pytest.approx(np.log(hi / 1.0) / 3)
-    assert scale == pytest.approx(0.1566678764, abs=1e-6)
+    assert scale == pytest.approx(0.18232156, abs=1e-6)
     # Must NOT be the old arithmetic (std - 1) * value == 0.2.
     prefix = (1.2 - 1) * 1.0
     assert abs(scale - prefix) > 0.01
@@ -406,7 +421,7 @@ def test_specific_std_scales_multiplicative_bounds() -> None:
     pert = _make_pert({"max_std": 3, "std_mrc": 1.2}, 1.5, i_val)
     lo_o, hi_o = pert.get_boundaries(
         ptype=Ptype.MRC.value, i_val=i_val, param=PARAM)
-    factor = 1 + (1.5 - 1) * 3  # = 2.5, using the OVERRIDE not the global 1.2.
+    factor = 1.5 ** 3  # = 3.375, using the OVERRIDE not the global 1.2.
     assert lo_o == pytest.approx(i_val / factor)
     assert hi_o == pytest.approx(i_val * factor)
     assert lo_o * hi_o == pytest.approx(i_val ** 2)

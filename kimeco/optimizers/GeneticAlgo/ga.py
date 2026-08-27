@@ -83,7 +83,7 @@ class GeneticAlgorithm(ABC):
         return [mdl.score for mdl in self.goat]
 
     @property
-    def converged(self) -> bool:
+    def stop_run(self) -> bool:
         avrg = float(np.average(self.goat_scores))
         if Generation.total() < 2:
             return False
@@ -379,7 +379,7 @@ class GeneticAlgorithm(ABC):
         prev_models: dict[int, Model]
         new_models: list[Model]
         prev_models, new_models = self.get_gen_one()
-        while (not self.converged and
+        while (not self.stop_run and
                Generation.total() < self.settings['max_gen']):
             new_gen = Generation(
                 models=new_models,
@@ -407,14 +407,14 @@ class GeneticAlgorithm(ABC):
             # self.write_score_update(gen=new_gen)
             if new_gen.id > 1:
                 self.print_stats()
-            if not self.converged:
+            if not self.stop_run:
                 prev_models, new_models = self.get_next_gen(gen=new_gen)
                 if new_gen.id % self.settings['SA_freq'] == 0 and\
                    new_gen.id >= self.settings['SA_start'] and\
                    new_gen.id <= self.settings['SA_end']:
                     self.run_sensitivity(gen_id=new_gen.id)
 
-        if self.converged:
+        if self.stop_run:
             try:
                 out_file = self.write_ga_rates_output()
                 self.klog.info(
@@ -794,8 +794,12 @@ class GeneticAlgorithm(ABC):
                     values[key].append(value)
 
         for key, vals in values.items():
-            means[key] = float(np.average(vals))
-            stds[key] = float(np.std(vals))
+            ptype = get_parameter_type(key)
+            if ptype.value in Pclass.MULTIPLICATIVE.value:
+                means[key], stds[key] = self.geometric_mean_and_std(vals)
+            else:
+                means[key] = float(np.average(vals))
+                stds[key] = float(np.std(vals))
         return means, stds
 
     @abstractmethod

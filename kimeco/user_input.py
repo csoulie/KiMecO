@@ -379,9 +379,12 @@ class KMOInput:
                 self.cancel_run = True
             # Replace value by enum for RNG distributions
             elif 'distrib' in key:  # Key is a distribution specified in JSON
-                for ptype in Ptype:
-                    if ptype.value in key:
-                        break
+                try:
+                    ptype = Ptype(key.removeprefix('distrib_'))
+                except ValueError:
+                    self.klog.warning(f"{key} has unknown distribution key.")
+                    self.cancel_run = True
+                    continue
                 if any([self.json_file[key].casefold() == distrib.value
                         for distrib in Distrib]):
                     dist = Distrib(self.json_file[key].casefold())
@@ -630,6 +633,14 @@ class KMOInput:
             if self.json_file[key] < 0:
                 self.klog.warning(f"{key} must be non-negative.")
                 self.cancel_run = True
+
+        if (self.json_file['optimizer'] == Optimizers.GA
+                and self.json_file['ga_type'].casefold() == 'tournament'
+                and self.json_file['n_mdl'] % 2 != 0):
+            self.klog.warning(
+                "Tournament GA requires an even 'n_mdl'; "
+                f"got {self.json_file['n_mdl']}.")
+            self.cancel_run = True
 
     def _check_automech(self) -> None:
         """Verify the mess_io symbols required by the automech-driven MESS

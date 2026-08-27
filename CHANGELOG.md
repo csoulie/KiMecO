@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional automech-driven two-pass MESS (WellExtension) path in the rate-coefficient pipeline, gated by a new boolean keyword `use_automech` (default `false`). When `false`, the existing single-pass MESS behavior is unchanged (KiMecO renders `{name}P{slot:02d}.inp` and runs `mess ...inp`). When `true`, KiMecO instead emits a self-contained per-job Python driver `{name}P{slot:02d}.py` that embeds the SOP's PES data inline (reads no database at runtime, avoiding concurrency errors), drives automech's stateless `mess_io` API to run MESS pass 1, preserves the pass-1 output as `_{name}P{slot:02d}.out`, calls `mess_io.well_lumped_input_file` to derive the WellExtension caps, then runs MESS pass 2 to produce the final `{name}P{slot:02d}.out`. The emitted script honors postprocessing partial re-runs (restricted `(P, T)` sub-grid) and reads external rotor and barrierless rotd/pp files from disk at runtime.
+- `automech` (`autoio`/`mess_io`) is an optional dependency required only when `use_automech=true`; its `mess_io` modules are imported during user-input reading (guarded by `_check_automech` in `user_input.full_run_settings`) and the run is cancelled early with a clear message if unavailable. No import is attempted when `use_automech=false`.
+
+
+## [1.1.6] - 2026-08-26
+
+### Added
+- Input validation now rejects an odd population size (`n_mdl`) when the GA tournament selection style (`ga_type='tournament'`) is chosen, since tournament pairing silently drops a model on odd populations. 
+- The MESS input reader (`readers/mess_input.py`) now rejects any Well, Bimolecular, Barrier, or Fragment name containing the reserved parameter-name separator `__` (dbs), logging an error and stopping the run gracefully. This protects the `<item>__<ptype>` naming contract that all parameter-type parsing relies on.
+
+
+### Fixed
+- Parameter-type (Ptype) identification strengthened throughout the code.
+- Genetic-algorithm convergence of multiplicative parameters is now evaluated with geometric means and std.
+
+
+## [1.1.5] - 2026-08-25
+
+### Fixed
+- Multiplicative-parameter perturbation, trust boundaries, and derivative steps are now computed in log space, fully consistent with the (already log-space) theory scoring. In the multiplicative branch only (`if`, `sfc`, `mrc`, `bfc`, frequencies), the arithmetic factor `1 + (std - 1) * max_std` / `1 + (uc - 1) * step` is replaced by the geometric/power factor `std**max_std` / `uc**step`: `get_boundaries` returns `(value / std**max_std, value * std**max_std)`, `get_scale` uses log-space sigma `ln(uncertainty)`, and the SA/Nelder-Mead `calculate_dstep` uses factor `uc**step` (SA `step = lin_fact / sensi_d`, NM `step = nm_dstep`). As a result the theory score at the trust boundary equals `max_std**2` exactly, and the lognormal log-space sampling sigma `ln(uncertainty)` yields ±2/3/4 sigma coverage of 95.45/99.73/99.99%. Additive and percentage parameters and `scoring.py` are unchanged.
+
+### Changed
+- The multiplicative trust region is now **wider** than before for `uncertainty > 1` (intended correction of the above reconciliation). Prior multiplicative-run results are therefore not bit-for-bit comparable.
+
 ## [1.1.4] - 2026-08-25
 
 ### Added
@@ -22,16 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-parameter `specific_std` overrides now govern the perturbation **boundaries** (the trusted range), not only the sampling scale and scoring weight.
 - Theory-score contribution for multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) is now computed in log space as `(ln(value / reference) / ln(uncertainty))**2`, replacing the previous linear distance/scale. The penalty is now symmetric under a factor `f` versus its inverse `1/f` and consistent with the perturbator's log-normal (log-space) sampling of those parameters. Additive and percentage parameters are unchanged. This is the scoring-side counterpart of the log-space perturbation correction shipped in [1.1.2].
 
-### Added
-- Optional automech-driven two-pass MESS (WellExtension) path in the rate-coefficient pipeline, gated by a new boolean keyword `use_automech` (default `false`). When `false`, the existing single-pass MESS behavior is unchanged (KiMecO renders `{name}P{slot:02d}.inp` and runs `mess ...inp`). When `true`, KiMecO instead emits a self-contained per-job Python driver `{name}P{slot:02d}.py` that embeds the SOP's PES data inline (reads no database at runtime, avoiding concurrency errors), drives automech's stateless `mess_io` API to run MESS pass 1, preserves the pass-1 output as `_{name}P{slot:02d}.out`, calls `mess_io.well_lumped_input_file` to derive the WellExtension caps, then runs MESS pass 2 to produce the final `{name}P{slot:02d}.out`. The emitted script honors postprocessing partial re-runs (restricted `(P, T)` sub-grid) and reads external rotor and barrierless rotd/pp files from disk at runtime.
-- `automech` (`autoio`/`mess_io`) is an optional dependency required only when `use_automech=true`; its `mess_io` modules are imported during user-input reading (guarded by `_check_automech` in `user_input.full_run_settings`) and the run is cancelled early with a clear message if unavailable. No import is attempted when `use_automech=false`.
 
 ## [1.1.2] - 2026-08-24
 
 ### Fixed
 - Fixed a bug where the postprocessing was reading rates from files on disk even when the rates are in db, potentially ready from MESS output calculated on a different P/T grid. This was causing a crash with an error P not in list, with P being the value in the file on disk not being in the postprocess conditions list. This is now bypassed, and the rates already in DB are always read from the DB.
 - CI now installs the `agentic` extra (`pip install -e .[test,agentic]`) so the agentic-pipeline tests (`test_agentic_pipeline_ci.py`) are collected and run, instead of aborting collection with `ModuleNotFoundError: No module named 'anthropic'`.
-- Multiplicative-parameter log-normal perturbation and the asymmetric sensitivity-analysis / Nelder-Mead derivative steps now use a corrected value-independent log-space sigma `log(1 + (std - 1) * max_std) / max_std`, so `±max_std·σ` coincides with the `get_boundaries` factor `1 + (std - 1) * max_std` (e.g. value 1 / std 1.2 / max_std 3 → ~99.7% of samples within `[1/1.6, 1.6]`); removed dead `get_mean_sigma`.
+- Multiplicative-parameter log-normal perturbation and the asymmetric sensitivity-analysis / Nelder-Mead derivative steps were moved off a value-dependent, additive log-space treatment onto a value-independent log-space sigma so that `±max_std·σ` coincides with the perturbation boundaries; removed dead `get_mean_sigma`. (Superseded in [Unreleased]: the multiplicative sigma is now `ln(uncertainty)` and the boundary factor is `uncertainty**max_std` rather than the earlier `log(1 + (std - 1) * max_std) / max_std` sigma and `1 + (std - 1) * max_std` boundary.)
 
 ### Changed
 - Error log entries in the KiMecO logfile now include the full Python traceback. Every backend `try/except` that logged its error through `KMOLogger` now passes `exc_info=True`, so the traceback is appended after the message (log-line format unchanged). Postprocessing GOAT-load failures and `well.py` uncertainty-parsing errors now log with a traceback instead of writing to stderr / a bare `print`.
@@ -120,6 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.6]: https://github.com/sandialabs/KiMecO/compare/v1.1.5...v1.1.6
+[1.1.5]: https://github.com/sandialabs/KiMecO/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/sandialabs/KiMecO/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/sandialabs/KiMecO/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandialabs/KiMecO/compare/v1.1.1...v1.1.2
@@ -130,4 +154,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandialabs/KiMecO/releases/tag/v1.0.0
-[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.4...HEAD
+[Unreleased]: https://github.com/sandialabs/KiMecO/compare/v1.1.6...HEAD

@@ -11,6 +11,7 @@ from kimeco.well import Well
 import numpy as np
 from kimeco.enums import Ptype, Distrib, Pclass
 from kimeco.database.kimeco_db import dbs
+from kimeco.scoring_f.scoring import get_parameter_type
 
 
 class Perturbator:
@@ -60,11 +61,8 @@ class Perturbator:
                           distrib='DISTRIBUTIONS')
         distrib: str = ''
         for param, un in self.i_sop.uncertainties.items():
-            pshort: str = param.split(dbs)[1]
-            for ptype in Ptype:
-                if ptype.value in pshort:
-                    distrib = self.distribs[ptype].value
-                    break
+            ptype = get_parameter_type(param)
+            distrib = self.distribs[ptype].value
             msg += tpl.format(param=param,
                               un_str=f'{un:-.2E}',
                               distrib=distrib)
@@ -103,8 +101,8 @@ class Perturbator:
                       * resolved_std * mult)
         elif ptype in self.multiplicative:
             bounds = (
-                i_val / (1 + (resolved_std-1) * mult),
-                i_val * (1 + (resolved_std-1) * mult))
+                i_val / resolved_std ** mult,
+                i_val * resolved_std ** mult)
         else:
             raise NotImplementedError('Parameter not parametrised.')
         if ptype in self.zero_bound and min(bounds) < 0:
@@ -160,11 +158,10 @@ class Perturbator:
         elif ptype in self.percent:
             return uncertainty * self.i_sop.parameters_names[param]
         elif ptype in self.multiplicative:
-            # log-space sigma so that +/-max_std*sigma reaches the
-            # get_boundaries factor 1+(std-1)*max_std; value-independent by
-            # construction.
-            mult = self.settings['max_std']
-            return float(np.log(1 + (uncertainty - 1) * mult) / mult)
+            # Log-space lognormal sigma: sampling in log space with
+            # sigma = ln(uncertainty) makes +/-2/3/4 sigma cover
+            # 95.45/99.73/99.99%, matching the log-space scoring.
+            return float(np.log(uncertainty))
         else:
             raise TypeError('Unknown parameter type in get_scale.')
 
