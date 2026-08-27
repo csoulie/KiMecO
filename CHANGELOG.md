@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The `kmo_start` launcher GUI no longer errors out when loading a saved configuration: a phantom perturbation control that was referenced but never rendered has been removed, so loading a config now reliably restores all fields instead of failing with a "nonexistent object" error.
 - Validating the SOP setup in the `kmo_start` GUI before a mechanism has been loaded now shows the normal red validation message instead of raising an uncaught error, and no longer leaves a stray logging handler or altered log verbosity behind afterwards.
+- Validating or loading a mechanism in the `kmo_start` GUI no longer fails with `Mechanism validation error: 'rc_pres'`. The mechanism-only validation path builds the model from default settings before the rate-constant pressure/temperature grid has been derived from the experiments, so those grids are now treated as optional (empty) during validation instead of raising a missing-key error. Full runs are unaffected.
 
 
 ## [1.1.6] - 2026-08-26

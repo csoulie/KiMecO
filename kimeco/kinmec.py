@@ -32,8 +32,8 @@ class KiMec:
             self.pres: list[float] = settings['pp_pres']
             self.temp: list[float] = settings['pp_temp']
         else:
-            self.pres: list[float] = settings['rc_pres']
-            self.temp: list[float] = settings['rc_temp']
+            self.pres: list[float] = settings.get('rc_pres', [])
+            self.temp: list[float] = settings.get('rc_temp', [])
         ct_any: Any = ct
         self.mech: Any = ct_any.Solution(file)
         self.species = [sp for sp in self.mech.species()]
