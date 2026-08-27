@@ -111,7 +111,7 @@ def _install_fscore_spy(monkeypatch: pytest.MonkeyPatch) -> list[Model]:
 
 
 def _scoring(sop: SOP) -> Scoring:
-    return Scoring(settings={}, initial_SOP=sop)
+    return Scoring(settings={"fix_theory_divider": False}, initial_SOP=sop)
 
 
 def test_get_goat_for_gen_returns_models_with_ids_gen_and_scores(

@@ -74,12 +74,7 @@ class Well:
     @property
     def frequencies(self) -> NDArray[Any]:
         if self.freq_mode == FreqMode.BATCH:
-            if self.bfc == 1.0:
-                return self._freq
-            elif self.bfc < 1.0:
-                return self._freq / ((1 / self._freq) * (1 - self.bfc) * 100 + 1)
-            else:
-                return self._freq * ((1 / self._freq) * (self.bfc - 1) * 100 + 1)
+            return self._freq * self.bfc ** (100/self._freq)
         elif self.freq_mode == FreqMode.INDIVIDUAL:
             return self._freq * self.ifc
         else:

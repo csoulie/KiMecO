@@ -46,8 +46,18 @@ class Scoring:
                  initial_SOP) -> None:
         self.settings: dict[str, Any] = settings
         self.SOP = initial_SOP
+        if self.settings['fix_theory_divider']:
+            self.t_div: int = len(settings['active_p'])
 
     def set_active_p(self, active_p: list[str]) -> None:
+        """Make sure the active parameters are updated
+
+        Args:
+            active_p (list[str]): list of active (perturbed) parameters
+        """
+        if self.settings['fix_theory_divider'] and\
+           self.t_div == 0:
+            self.t_div: int = len(active_p)
         self.settings['active_p'] = active_p
 
     def score_theory(self,
@@ -64,7 +74,10 @@ class Scoring:
                 np.array(self.SOP.parameters_names[p])
             ) and 'score' not in p
         ]
-        n_active_p = len(sop_active_p)
+        if self.settings['fix_theory_divider']:
+            n_active_p: int = self.t_div
+        else:
+            n_active_p = len(sop_active_p)
         if n_active_p == 0:
             # During first sensitivity pass, no active parameters are set yet.
             # Theory term must be neutral so SA can rank perturbations.

@@ -169,48 +169,53 @@ class KiMecO:
         """Start with user specified parameters,
         or run a first densitivity analysis.
         """
-        # User friendly for jupyter notebook use
-        Linear.reset()
-        self.sensitivity = Linear(
-            models=[Model(
-                sop=self.init_SOP,
-                id=0)],
-            settings=self.settings,
-            rc_tpls=self.input_tpls,
-            sf=self.sf,
-            pert=self.pert,
-            klog=self.klog)
-        if not self.sensitivity.models_from_db:
-            self.klog.info(f"{'Running sensitivity analysis':<65}")
+        self.f_mdl = Model(
+                    sop=self.init_SOP,
+                    id=0)
+        if not self.first_sensi:
+            msg = "Initial active parameters were given by the user\n"
+            msg += "{}".format(self.settings['active_p']).replace("'", '"')
+            self.klog.info(msg)
         else:
-            self.klog.info(f"{'SA read from DB':<65}")
-        self.sensitivity.run()  # Only actually run if necessary
-        self.settings['active_p'] = self.sensitivity.selected
+            # User friendly for jupyter notebook use
+            Linear.reset()
+            self.sensitivity = Linear(
+                models=[self.f_mdl],
+                settings=self.settings,
+                rc_tpls=self.input_tpls,
+                sf=self.sf,
+                pert=self.pert,
+                klog=self.klog)
+            if not self.sensitivity.models_from_db:
+                self.klog.info(f"{'Running sensitivity analysis':<65}")
+            else:
+                self.klog.info(f"{'SA read from DB':<65}")
+            self.sensitivity.run()  # Only actually run if necessary
+            self.settings['active_p'] = self.sensitivity.selected
+            # self.f_mdl: Model = self.sensitivity.models[0]
+            if not self.sensitivity.models_from_db or \
+                (self.settings['restart'] == RestartType.RESCORE and
+                self.sensitivity.models_from_db):
+                self.sensitivity.save_initial_model(
+                    sop_db=self.sop_db,
+                    kin_db=self.kin_db,
+                    sim_db=self.sim_db
+                )
+
+            msg = f"{'Parameters selected for perturbation:':<80}"
+            msg += '\n'
+            msg += "{}".format(self.settings['active_p']).replace("'", '"')
+            self.klog.info(msg)
+
         self.sf.set_active_p(self.settings['active_p'])
-        self.f_mdl: Model = self.sensitivity.models[0]
-        if not self.sensitivity.models_from_db or \
-            (self.settings['restart'] == RestartType.RESCORE and
-             self.sensitivity.models_from_db):
-            self.sensitivity.save_initial_model(
-                sop_db=self.sop_db,
-                kin_db=self.kin_db,
-                sim_db=self.sim_db
-            )
 
-        msg = f"{'Parameters selected for perturbation:':<80}"
-        msg += '\n'
-        msg += "{}".format(self.settings['active_p']).replace("'", '"')
-        self.klog.info(msg)
-
-        # # Reinitialize the perturbator once the list of parameters to perturb
+        # Reinitialize the perturbator once the list of parameters to perturb
         # has been reduced
         self.pert: Perturbator = Perturbator(
             settings=self.settings,
             initial_SOP=self.init_SOP,
             klog=self.klog
             )
-        # self.klog.info(
-        #     f"{'Selected parameters transmitted to perturbator':<80}")
 
     def set_optimizer(self) -> None:
         """Define the optimizer being used for this run

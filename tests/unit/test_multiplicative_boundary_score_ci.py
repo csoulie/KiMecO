@@ -58,7 +58,10 @@ def _ref_scoring(ref: float, unc: float) -> Scoring:
         parameters_names={IF_P: ref},
         uncertainties={IF_P: unc},
     )
-    return Scoring(settings={"active_p": [IF_P]}, initial_SOP=reference)
+    return Scoring(
+        settings={"active_p": [IF_P], "fix_theory_divider": False},
+        initial_SOP=reference,
+    )
 
 
 def _candidate(value: float) -> Any:

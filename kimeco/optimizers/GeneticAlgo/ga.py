@@ -709,6 +709,8 @@ class GeneticAlgorithm(ABC):
             self.sf.set_active_p(self.settings['active_p'])
             msg = 'Perturbing the following new parameters:\n'
             msg += "{}".format(new_params).replace("'", '"')
+            self.goats.reset()
+            msg += '\nThe goat list has been reset'
             self.klog.info(msg)
 
     @staticmethod

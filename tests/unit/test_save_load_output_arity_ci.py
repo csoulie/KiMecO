@@ -45,8 +45,8 @@ def _set_ctx(monkeypatch, triggered_id):
     )
 
 
-def test_declared_output_count_is_68():
-    assert DECLARED == 68
+def test_declared_output_count_is_69():
+    assert DECLARED == 69
 
 
 def test_early_return_tuple_matches_declared(monkeypatch):

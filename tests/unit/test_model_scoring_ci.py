@@ -50,6 +50,7 @@ def test_scoring_sets_model_score_as_mutable_attribute() -> None:
         "active_p": ["A__we"],
         "weight_theory": 1.0,
         "weight_experiments": 3.0,
+        "fix_theory_divider": False,
     }
     exp = _exp(
         name="exp_0",
@@ -89,6 +90,7 @@ def test_scoring_uses_equal_split_when_global_weights_are_zero() -> None:
         "active_p": ["A__we"],
         "weight_theory": 0.0,
         "weight_experiments": 0.0,
+        "fix_theory_divider": False,
     }
     exp = _exp(
         name="exp_0",
@@ -152,6 +154,7 @@ def test_scoring_keeps_finite_total_when_active_p_is_empty() -> None:
         "active_p": [],
         "weight_theory": 1.0,
         "weight_experiments": 1.0,
+        "fix_theory_divider": False,
     }
     exp = _exp(
         name="exp_0",
@@ -186,7 +189,7 @@ def test_multiplicative_theory_score_is_factor_symmetric() -> None:
         uncertainties={"TS__if": 1.2},
         scores={},
     )
-    settings = {"active_p": ["TS__if"]}
+    settings = {"active_p": ["TS__if"], "fix_theory_divider": False}
     sf = Scoring(settings=settings, initial_SOP=reference)
 
     up_sop = _sop(
@@ -214,7 +217,7 @@ def test_multiplicative_theory_score_unit_case() -> None:
         uncertainties={"TS__if": 2.0},
         scores={},
     )
-    settings = {"active_p": ["TS__if"]}
+    settings = {"active_p": ["TS__if"], "fix_theory_divider": False}
     sf = Scoring(settings=settings, initial_SOP=reference)
 
     candidate = _sop(
@@ -233,6 +236,119 @@ def test_multiplicative_uncertainty_one_raises() -> None:
             reference_uncertainties={"TS__if": 1.0},
             param="TS__if",
         )
+
+
+def test_fix_theory_divider_false_uses_current_active_count() -> None:
+    """Regression guard: with the flag off, score_theory normalizes by the
+    number of parameters that actually differ from the reference."""
+    reference = _sop(
+        parameters={"A__we": 10.0, "B__we": 20.0},
+        uncertainties={"A__we": 2.0, "B__we": 2.0},
+        scores={},
+    )
+    settings = {
+        "active_p": ["A__we", "B__we"],
+        "fix_theory_divider": False,
+    }
+    sf = Scoring(settings=settings, initial_SOP=reference)
+
+    candidate = _sop(
+        parameters={"A__we": 12.0, "B__we": 24.0},
+        uncertainties={"A__we": 2.0, "B__we": 2.0},
+        scores={},
+    )
+
+    # Two parameters differ -> divide by 2.
+    # ((12-10)/2)**2 / 2 + ((24-20)/2)**2 / 2 = 0.5 + 2.0 = 2.5
+    assert sf.score_theory(cast(Any, candidate)) == pytest.approx(2.5)
+
+
+def test_fix_theory_divider_true_locks_first_nonempty_length() -> None:
+    """Core behavior: with the flag on, the divider is locked to the first
+    non-empty active_p length and a later shorter active_p does not shrink it.
+    """
+    reference = _sop(
+        parameters={"A__we": 10.0, "B__we": 20.0},
+        uncertainties={"A__we": 2.0, "B__we": 2.0},
+        scores={},
+    )
+    settings = {
+        "active_p": ["A__we", "B__we"],
+        "fix_theory_divider": True,
+    }
+    sf = Scoring(settings=settings, initial_SOP=reference)
+    assert sf.t_div == 2
+
+    # Later, active_p is reduced. The locked divider must NOT change.
+    sf.set_active_p(["A__we"])
+    assert sf.t_div == 2
+
+    # Only one parameter actually differs, but the divider stays 2.
+    candidate = _sop(
+        parameters={"A__we": 12.0, "B__we": 20.0},
+        uncertainties={"A__we": 2.0, "B__we": 2.0},
+        scores={},
+    )
+    # ((12-10)/2)**2 / 2 = 0.5  (would be 1.0 if divider tracked the count)
+    assert sf.score_theory(cast(Any, candidate)) == pytest.approx(0.5)
+
+
+def test_fix_theory_divider_init_seeds_t_div_from_active_p() -> None:
+    reference = _sop(
+        parameters={"A__we": 10.0, "B__we": 20.0},
+        uncertainties={"A__we": 2.0, "B__we": 2.0},
+        scores={},
+    )
+    settings = {
+        "active_p": ["A__we", "B__we"],
+        "fix_theory_divider": True,
+    }
+    sf = Scoring(settings=settings, initial_SOP=reference)
+    assert sf.t_div == 2
+
+
+def test_fix_theory_divider_true_empty_active_p_gives_neutral_theory() -> None:
+    """Edge: flag on but active_p empty -> t_div stays 0 -> neutral 0.0."""
+    reference = _sop(
+        parameters={"A__we": 10.0},
+        uncertainties={"A__we": 2.0},
+        scores={},
+    )
+    settings = {"active_p": [], "fix_theory_divider": True}
+    sf = Scoring(settings=settings, initial_SOP=reference)
+    assert sf.t_div == 0
+
+    candidate = _sop(
+        parameters={"A__we": 12.0},
+        uncertainties={"A__we": 2.0},
+        scores={},
+    )
+    assert sf.score_theory(cast(Any, candidate)) == pytest.approx(0.0)
+
+
+def test_fix_theory_divider_first_nonempty_wins() -> None:
+    """Edge: the FIRST non-empty active_p locks the divider; empties before it
+    leave it at 0, and shorter lists after it do not change it."""
+    reference = _sop(
+        parameters={"A__we": 10.0},
+        uncertainties={"A__we": 2.0},
+        scores={},
+    )
+    settings = {"active_p": [], "fix_theory_divider": True}
+    sf = Scoring(settings=settings, initial_SOP=reference)
+    assert sf.t_div == 0
+
+    # An empty update keeps it at 0.
+    sf.set_active_p([])
+    assert sf.t_div == 0
+
+    # The first non-empty update locks the divider to 2.
+    sf.set_active_p(["A__we", "B__we"])
+    assert sf.t_div == 2
+
+    # A later shorter update does not change the locked divider.
+    sf.set_active_p(["A__we"])
+    assert sf.t_div == 2
 
 
 def test_additive_and_percent_scales_unchanged() -> None:

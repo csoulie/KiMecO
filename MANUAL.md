@@ -221,10 +221,11 @@ This section controls both static sensitivity-based parameter selection and on-t
 |---|---|---|
 | sensi_d | 0.1 | Derivative step multiplier applied to parameter uncertainty in sensitivity analysis. |
 | cumul_sensi | 0.95 | Cumulative sensitivity threshold (0 to 1) used to select active parameters. |
-| active_p | [] | Explicit list of parameters to perturb. If set, it bypasses sensitivity-based selection. |
+| active_p | [] | Explicit list of parameters to perturb. If set, it skips only the **initial** sensitivity analysis; the listed parameters are preserved, and the on-the-fly sensitivity analysis during the GA still runs and augments this list. Leave empty to run the initial sensitivity analysis. |
 | SA_start | 1 | Generation index to start on-the-fly sensitivity analysis. |
 | SA_end | 80 | Generation index to stop on-the-fly sensitivity analysis. |
-| SA_freq | 20 | Frequency (in generations) for running on-the-fly sensitivity updates.
+| SA_freq | 20 | Frequency (in generations) for running on-the-fly sensitivity updates. |
+| fix_theory_divider | false | When `true`, the first theory divider used to average the active parameters' scores is fixed for the whole run, so models with different numbers of active parameters are never compared under different dividers. |
 
 The derivative step is direction-dependent and set by the parameter's class (not its sampling distribution). For multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, frequencies) the step is truly multiplicative and computed in log space: with factor `f = uc**sensi_d` (where `uc` is the parameter uncertainty), the up step is `value * f` and the down step is `value / f` (e.g. `uc = 1.1`, `sensi_d = 0.1` → perturbed values `[value / 1.1**0.1, value * 1.1**0.1]`). Additive and percentage parameters use an additive step, `value + scale * sensi_d * side`.
 
@@ -285,6 +286,8 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 | weight_experiments | 1.0 | Raw experiment contribution weight; normalized at runtime with weight_theory. |
 | specific_std | {} | Per-parameter override map for standard deviations. An entry overrides the global `std_<ptype>` for that parameter and governs the sampling scale, the scoring weight, **and** the perturbation boundaries (trusted range): a larger value widens the accepted bounds, a smaller one tightens them. Parameters without an entry fall back to the global `std_<ptype>`. |
 | frozen_params | [] | List of parameters (strings) that are frozen and will not be perturbed. The parameters names of a system are listed at the top of the logfile after starting a run. |
+
+In `batch` frequency mode, the set of perturbed batch frequency factors is derived from the batch frequency coefficient (`bfc`) and the number of frequencies (`freq`) as `frequencies = freq * bfc**(100/freq)`. Changing this formula affects numeric results, so runs from before and after such a change are not bit-for-bit comparable.
 
 Parameters names, used in `specific_std` and `frozen_params`, are constructed by concatenating the species name, two underscores, and the parameter type. For example, `C2H5__we` is the well energy of C2H5, and `O2__we` is the well energy of O2.
 To freeze the energy of a bimolecular specie, one has to freeze the energy of its 2 fragments.

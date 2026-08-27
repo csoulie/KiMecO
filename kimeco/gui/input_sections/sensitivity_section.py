@@ -66,8 +66,11 @@ def create_sensitivity_section() -> html.Div:
                     className="form-label fw-semibold mt-3"
                 ),
                 html.Small(
-                    "Directly select the active parameters"
-                    "and bypass the sensitivity analysis. Leave empty to not bypass.",
+                    "Directly select the active parameters. This skips only "
+                    "the initial sensitivity analysis; the selected parameters "
+                    "are preserved and on-the-fly sensitivity analysis during "
+                    "the GA still runs and augments this list. Leave empty to "
+                    "run the initial sensitivity analysis.",
                     className="text-muted d-block mb-2"
                 ),
                 dcc.Dropdown(
@@ -79,6 +82,26 @@ def create_sensitivity_section() -> html.Div:
                     placeholder="System's parameters",
                     disabled=True,
                     className="mt-1",
+                ),
+            ], className="mt-2"),
+            html.Div([
+                html.Label(
+                    "Fix theory divider",
+                    className="form-label fw-semibold mt-3"
+                ),
+                dcc.Checklist(
+                    id="sensitivity-fix-theory-divider",
+                    options=[{"label": " Enabled", "value": "on"}],
+                    value=(["on"] if default_settings["fix_theory_divider"]
+                           else []),
+                    className="mt-1",
+                ),
+                html.Small(
+                    "When enabled, the first theory divider used to average "
+                    "the active parameters' scores is fixed for the whole run, "
+                    "so models with different numbers of active parameters are "
+                    "never compared under different dividers.",
+                    className="form-text text-muted"
                 ),
             ], className="mt-2"),
         ], className="border rounded p-3 mt-3"),
@@ -300,6 +323,7 @@ def update_parameter_options(param_options: list) -> Tuple[list, bool]:
     Input("sensitivity-sa-end-input", "value"),
     Input("sensitivity-sa-freq-input", "value"),
     Input("sensitivity-sa-restart-store", "data"),
+    Input("sensitivity-fix-theory-divider", "value"),
     prevent_initial_call=True,
 )
 def update_sensitivity_config(
@@ -310,6 +334,7 @@ def update_sensitivity_config(
     sa_end: int,
     sa_freq: int,
     sa_restart: list,
+    fix_theory_divider: list,
 ) -> Tuple[dict, bool, Any, dict]:
     """Validate and emit sensitivity configuration."""
     if sensi_d is None or cumul_sensi is None:
@@ -342,6 +367,7 @@ def update_sensitivity_config(
         "SA_freq": (int(sa_freq) if sa_freq is not None
                     else default_settings["SA_freq"]),
         "SA_restart": sa_restart_dict,
+        "fix_theory_divider": bool(fix_theory_divider),
     }
 
     # Validation

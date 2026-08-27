@@ -671,6 +671,7 @@ def save_config_download(
     Output("sensitivity-sa-start-input", "value"),
     Output("sensitivity-sa-end-input", "value"),
     Output("sensitivity-sa-freq-input", "value"),
+    Output("sensitivity-fix-theory-divider", "value"),
     Output("sensitivity-sa-restart-store", "data", allow_duplicate=True),
     Output("optimizer-scheme-dropdown", "value"),
     Output("optimizer-max-gen-input", "value", allow_duplicate=True),
@@ -734,7 +735,7 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
     """Load JSON config from disk and update GUI controls/stores."""
     triggered_id = callback_context.triggered_id
     if not n_clicks and triggered_id != "autoload-config-path-store":
-        return (no_update,) * 68
+        return (no_update,) * 69
 
     try:
         requested_path = autoload_path if triggered_id == "autoload-config-path-store" else config_path
@@ -790,6 +791,10 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
             loaded.get("SA_start", default_settings["SA_start"]),
             loaded.get("SA_end", default_settings["SA_end"]),
             loaded.get("SA_freq", default_settings["SA_freq"]),
+            ["on"] if loaded.get(
+                "fix_theory_divider",
+                default_settings["fix_theory_divider"],
+            ) else [],
             sa_restart_store,
             _infer_optimizer_scheme(loaded),
             loaded.get("max_gen", default_settings["max_gen"]),
@@ -855,5 +860,5 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
         return (
             f"Failed to load config: {exc}",
             _status_style(success=False),
-            *([no_update] * 66),
+            *([no_update] * 67),
         )

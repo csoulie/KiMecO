@@ -124,7 +124,9 @@ PARAMETER_DESCRIPTIONS = {
     "active_p": "Parameters to perturb",
     "SA_freq": "Sensitivity analysis frequency",
     "SA_start": "Start generation for SA",
+    "SA_end": "End generation for SA",
     "SA_restart": "SA restart dictionary",
+    "fix_theory_divider": "Fix the theory score divider for the whole run",
     "threads": "Number of I/O threads",
 }
 
@@ -212,7 +214,9 @@ PARAMETER_CATEGORIES = {
     "active_p": "Sensitivity Analysis",
     "SA_freq": "Sensitivity Analysis",
     "SA_start": "Sensitivity Analysis",
+    "SA_end": "Sensitivity Analysis",
     "SA_restart": "Sensitivity Analysis",
+    "fix_theory_divider": "Sensitivity Analysis",
 }
 
 

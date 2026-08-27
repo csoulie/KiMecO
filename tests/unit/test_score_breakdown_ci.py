@@ -26,7 +26,7 @@ def _exp(name: str, weight: float = 1.0) -> Any:
 
 def _scoring(experiments: list[Any]) -> Scoring:
     return Scoring(
-        settings={"experiments": experiments},
+        settings={"experiments": experiments, "fix_theory_divider": False},
         initial_SOP=cast(Any, None),
     )
 

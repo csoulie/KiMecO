@@ -121,6 +121,12 @@ class GOATs:
         inst.generations = gens
         return inst
 
+    def reset(self) -> None:
+        """Reset the Goat list, so that it will only be constituted by new
+        models after the next update.
+        """
+        self.all_seen = {}
+
     def get_goat_for_gen(self, generation_number: int) -> List[Model]:
         """Return a list of Model objects for the given generation number.
 

@@ -205,6 +205,10 @@ default_settings: dict[str, Any] = {
     "cumul_sensi": 0.95,
     # User given list of parameters to perturb. All if empty.
     "active_p": [],
+    # Fix the size of the divider used as the number of active parameters
+    # for the scoring of the theory to ensure theory scores use the same
+    # metric during the optimization.
+    "fix_theory_divider": False,
     # Frequency of the sensitivity analysis
     "SA_freq": 20,
     # From which generation to start the sensitivity analysis
