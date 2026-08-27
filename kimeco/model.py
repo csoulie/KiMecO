@@ -71,6 +71,35 @@ class Model:
     def __hash__(self) -> int:
         return hash((self.sop, self.gen, self.id))
 
+    def different_parameters(self, other: "Model") -> int:
+        """Count how many parameters differ between this model and another.
+
+        Iterates the canonical parameter set (``self.sop.parameters_names``)
+        and counts keys whose value differs from ``other``'s corresponding
+        value, using ``np.isclose`` with a hardcoded relative tolerance of
+        1e-6 (0.0001%) and NumPy's default absolute tolerance (1e-8).
+
+        Experimental score parameters (keys containing ``'score'``,
+        i.e. ``Ptype.SCORE``) are excluded; ``other`` is assumed to share
+        the same parameter key set as ``self``.
+
+        Args:
+            other (Model): the model to compare against.
+
+        Returns:
+            int: the number of parameters that differ.
+        """
+        return sum(
+            1
+            for k in self.sop.parameters_names
+            if 'score' not in k
+            and ~np.isclose(
+                self.sop.parameters_names[k],
+                other.sop.parameters_names[k],
+                rtol=1e-6,
+            )
+        )
+
     def save_kin(self,
                  db: KIN_DB,
                  table: str) -> None:

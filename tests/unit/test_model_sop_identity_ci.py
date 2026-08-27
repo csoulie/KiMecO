@@ -118,3 +118,70 @@ def test_set_dedup_ignores_origin_prefix() -> None:
     # origin_prefix participates in neither __eq__ nor __hash__.
     assert m1 == m2
     assert len({m1, m2}) == 1
+
+
+# ---------------------------------------------------------------------------
+# Model.different_parameters
+# ---------------------------------------------------------------------------
+def test_different_parameters_identical_models_returns_zero() -> None:
+    m1 = Model(sop=_make_sop(), id=0, gen=0)
+    m2 = Model(sop=_make_sop(), id=0, gen=0)
+
+    assert m1.different_parameters(m2) == 0
+
+
+def test_different_parameters_single_physical_diff_returns_one() -> None:
+    m1 = Model(sop=_make_sop(factor=1.0), id=0, gen=0)
+    m2 = Model(sop=_make_sop(factor=9.0), id=0, gen=0)
+
+    # Only the ETF/'fact' parameter differs.
+    assert m1.different_parameters(m2) == 1
+
+
+def test_different_parameters_multiple_diffs_returns_correct_count() -> None:
+    m1 = Model(sop=_make_sop(factor=1.0, power=2.0), id=0, gen=0)
+    m2 = Model(sop=_make_sop(factor=9.0, power=5.0), id=0, gen=0)
+
+    # Both 'fact' and 'pow' differ.
+    assert m1.different_parameters(m2) == 2
+
+
+def test_different_parameters_is_symmetric() -> None:
+    m1 = Model(sop=_make_sop(factor=1.0, power=2.0), id=0, gen=0)
+    m2 = Model(sop=_make_sop(factor=9.0, power=5.0), id=0, gen=0)
+
+    assert m1.different_parameters(m2) == m2.different_parameters(m1)
+
+
+def test_different_parameters_score_key_excluded_returns_zero() -> None:
+    m1 = Model(sop=_make_sop(), id=0, gen=0)
+    m2 = Model(sop=_make_sop(), id=0, gen=0)
+    # Mutate only a score entry; 'score' keys are excluded from the count.
+    key = next(iter(m2.sop.scores))
+    m2.sop.scores[key] = 0.5
+
+    assert m1.different_parameters(m2) == 0
+
+
+def test_different_parameters_diff_below_rtol_not_counted() -> None:
+    m1 = Model(sop=_make_sop(factor=1.0), id=0, gen=0)
+    m2 = Model(sop=_make_sop(factor=1.0 + 5e-7), id=0, gen=0)
+
+    # Relative diff (~5e-7) is below rtol=1e-6, so it is treated as close.
+    assert m1.different_parameters(m2) == 0
+
+
+def test_different_parameters_diff_above_rtol_counted() -> None:
+    m1 = Model(sop=_make_sop(factor=1.0), id=0, gen=0)
+    m2 = Model(sop=_make_sop(factor=1.0 + 2e-6), id=0, gen=0)
+
+    # Relative diff (~2e-6) exceeds rtol=1e-6, so it counts as different.
+    assert m1.different_parameters(m2) == 1
+
+
+def test_different_parameters_near_zero_uses_default_atol() -> None:
+    m1 = Model(sop=_make_sop(factor=0.0), id=0, gen=0)
+    m2 = Model(sop=_make_sop(factor=1e-9), id=0, gen=0)
+
+    # Near zero, np.isclose's default atol=1e-8 absorbs the 1e-9 gap.
+    assert m1.different_parameters(m2) == 0
